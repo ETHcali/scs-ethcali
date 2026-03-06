@@ -1,11 +1,11 @@
 // Auto-generated contract addresses and types for Optimism Mainnet
-// Generated: 2026-03-06T05:53:24.310Z
+// Generated: 2026-03-06T06:21:43.296Z
 export const CONTRACTS = {
   "network": "optimism",
   "chainId": 10,
   "contracts": {
     "ZKPassportNFT": {
-      "address": "0x01401f4802bcd0e1ee4fa7e42a1b7f48ab82d121",
+      "address": "0x607003f188c49ed6e0553805734b9990393402df",
       "abi": [
         {
           "inputs": [
@@ -1042,7 +1042,7 @@ export const CONTRACTS = {
       ]
     },
     "FaucetManager": {
-      "address": "0x016d7d55708f7b7b39693e2b46d69f290537420b",
+      "address": "0x2940e286b41d279b61e484b98a08498e355e4778",
       "abi": [
         {
           "inputs": [
@@ -2601,7 +2601,7 @@ export const CONTRACTS = {
       ]
     },
     "Swag1155": {
-      "address": "0x7a61c947a59a6b9364928af60341b50c1fb83439",
+      "address": "0xd9663db045850171850fd1298a2176b329a67928",
       "abi": [
         {
           "inputs": [
@@ -4675,7 +4675,7 @@ export const CONTRACTS = {
       ]
     },
     "SwagFactory": {
-      "address": "0x18b581aba74e0068b60b3af00814b8293b837a60",
+      "address": "0x94b9f649f8825d5d797e37d04dfc66d612750b10",
       "abi": [
         {
           "inputs": [
@@ -5347,10 +5347,10 @@ export const CONTRACTS = {
 } as const;
 
 export const ADDRESSES = {
-  ZKPassportNFT: "0x01401f4802bcd0e1ee4fa7e42a1b7f48ab82d121",
-  FaucetManager: "0x016d7d55708f7b7b39693e2b46d69f290537420b",
-  Swag1155: "0x7a61c947a59a6b9364928af60341b50c1fb83439",
-  SwagFactory: "0x18b581aba74e0068b60b3af00814b8293b837a60",
+  ZKPassportNFT: "0x607003f188c49ed6e0553805734b9990393402df",
+  FaucetManager: "0x2940e286b41d279b61e484b98a08498e355e4778",
+  Swag1155: "0xd9663db045850171850fd1298a2176b329a67928",
+  SwagFactory: "0x94b9f649f8825d5d797e37d04dfc66d612750b10",
 } as const;
 
 export const CHAIN_ID = 10 as const;

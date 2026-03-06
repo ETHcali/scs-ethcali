@@ -1,11 +1,11 @@
 // Auto-generated contract addresses and types for Unichain Mainnet
-// Generated: 2026-03-06T05:53:24.308Z
+// Generated: 2026-03-06T06:21:43.291Z
 export const CONTRACTS = {
   "network": "unichain",
   "chainId": 130,
   "contracts": {
     "ZKPassportNFT": {
-      "address": "0x8057dfc3d5aa4e6d66a2fc2c66f9282846a36a62",
+      "address": "0xc2ddade57815220833c31ecab6f6e9de9c69df09",
       "abi": [
         {
           "inputs": [
@@ -1042,7 +1042,7 @@ export const CONTRACTS = {
       ]
     },
     "FaucetManager": {
-      "address": "0xa2db0955b8e452a489b977e308b38691eb093f0c",
+      "address": "0xdf1be43ae0636ba6f9bc26f75ab6ba8d66a3ddc8",
       "abi": [
         {
           "inputs": [
@@ -2601,7 +2601,7 @@ export const CONTRACTS = {
       ]
     },
     "Swag1155": {
-      "address": "0x4437ac2399e7346d1cb47e7d0be19a67eec11a21",
+      "address": "0x5811f284e340f6968bcffe2415e582e0eb429981",
       "abi": [
         {
           "inputs": [
@@ -4675,7 +4675,7 @@ export const CONTRACTS = {
       ]
     },
     "SwagFactory": {
-      "address": "0xbd18bf96d5daf4f05ad3b2ff38108a57cc9ba309",
+      "address": "0x79abd2dabe18fa1086e210c41b622ed6011e0c85",
       "abi": [
         {
           "inputs": [
@@ -5347,10 +5347,10 @@ export const CONTRACTS = {
 } as const;
 
 export const ADDRESSES = {
-  ZKPassportNFT: "0x8057dfc3d5aa4e6d66a2fc2c66f9282846a36a62",
-  FaucetManager: "0xa2db0955b8e452a489b977e308b38691eb093f0c",
-  Swag1155: "0x4437ac2399e7346d1cb47e7d0be19a67eec11a21",
-  SwagFactory: "0xbd18bf96d5daf4f05ad3b2ff38108a57cc9ba309",
+  ZKPassportNFT: "0xc2ddade57815220833c31ecab6f6e9de9c69df09",
+  FaucetManager: "0xdf1be43ae0636ba6f9bc26f75ab6ba8d66a3ddc8",
+  Swag1155: "0x5811f284e340f6968bcffe2415e582e0eb429981",
+  SwagFactory: "0x79abd2dabe18fa1086e210c41b622ed6011e0c85",
 } as const;
 
 export const CHAIN_ID = 130 as const;

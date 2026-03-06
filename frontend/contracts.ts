@@ -1,5 +1,5 @@
 // Auto-generated multi-network contract addresses and types
-// Generated: 2026-03-06T05:53:24.314Z
+// Generated: 2026-03-06T06:21:43.308Z
 export const CONTRACTS = {
   "networks": {
     "base": {
@@ -7,7 +7,7 @@ export const CONTRACTS = {
       "chainId": 8453,
       "contracts": {
         "ZKPassportNFT": {
-          "address": "0xe9d1d4fb7615f9bd879d70c70daa07a2a05fc834",
+          "address": "0xa3f1150a8414b0383244e7c7936119e3e24d106d",
           "abi": [
             {
               "inputs": [
@@ -1044,7 +1044,7 @@ export const CONTRACTS = {
           ]
         },
         "FaucetManager": {
-          "address": "0xe9b78619c4ef60d8aec9fe6572991c03432de130",
+          "address": "0x145d0d587bce7e390750cd67301e02478c51b48c",
           "abi": [
             {
               "inputs": [
@@ -2603,7 +2603,7 @@ export const CONTRACTS = {
           ]
         },
         "Swag1155": {
-          "address": "0xe132daa0e39299260c35399e57e20ac837729b9f",
+          "address": "0xfc87358e017ec814fe94139af82e6f25b293d5b8",
           "abi": [
             {
               "inputs": [
@@ -4677,7 +4677,7 @@ export const CONTRACTS = {
           ]
         },
         "SwagFactory": {
-          "address": "0xeed15d56c47f164859c5c19118cd444eb58b6b00",
+          "address": "0x89fb2a22bbb309703019b34439ae70b7e6d81e96",
           "abi": [
             {
               "inputs": [
@@ -10028,7 +10028,7 @@ export const CONTRACTS = {
       "chainId": 130,
       "contracts": {
         "ZKPassportNFT": {
-          "address": "0x8057dfc3d5aa4e6d66a2fc2c66f9282846a36a62",
+          "address": "0xc2ddade57815220833c31ecab6f6e9de9c69df09",
           "abi": [
             {
               "inputs": [
@@ -11065,7 +11065,7 @@ export const CONTRACTS = {
           ]
         },
         "FaucetManager": {
-          "address": "0xa2db0955b8e452a489b977e308b38691eb093f0c",
+          "address": "0xdf1be43ae0636ba6f9bc26f75ab6ba8d66a3ddc8",
           "abi": [
             {
               "inputs": [
@@ -12624,7 +12624,7 @@ export const CONTRACTS = {
           ]
         },
         "Swag1155": {
-          "address": "0x4437ac2399e7346d1cb47e7d0be19a67eec11a21",
+          "address": "0x5811f284e340f6968bcffe2415e582e0eb429981",
           "abi": [
             {
               "inputs": [
@@ -14698,7 +14698,7 @@ export const CONTRACTS = {
           ]
         },
         "SwagFactory": {
-          "address": "0xbd18bf96d5daf4f05ad3b2ff38108a57cc9ba309",
+          "address": "0x79abd2dabe18fa1086e210c41b622ed6011e0c85",
           "abi": [
             {
               "inputs": [
@@ -15373,7 +15373,7 @@ export const CONTRACTS = {
       "chainId": 10,
       "contracts": {
         "ZKPassportNFT": {
-          "address": "0x01401f4802bcd0e1ee4fa7e42a1b7f48ab82d121",
+          "address": "0x607003f188c49ed6e0553805734b9990393402df",
           "abi": [
             {
               "inputs": [
@@ -16410,7 +16410,7 @@ export const CONTRACTS = {
           ]
         },
         "FaucetManager": {
-          "address": "0x016d7d55708f7b7b39693e2b46d69f290537420b",
+          "address": "0x2940e286b41d279b61e484b98a08498e355e4778",
           "abi": [
             {
               "inputs": [
@@ -17969,7 +17969,7 @@ export const CONTRACTS = {
           ]
         },
         "Swag1155": {
-          "address": "0x7a61c947a59a6b9364928af60341b50c1fb83439",
+          "address": "0xd9663db045850171850fd1298a2176b329a67928",
           "abi": [
             {
               "inputs": [
@@ -20043,7 +20043,7 @@ export const CONTRACTS = {
           ]
         },
         "SwagFactory": {
-          "address": "0x18b581aba74e0068b60b3af00814b8293b837a60",
+          "address": "0x94b9f649f8825d5d797e37d04dfc66d612750b10",
           "abi": [
             {
               "inputs": [
@@ -20721,10 +20721,10 @@ export const ADDRESSES = {
   "base": {
     "chainId": 8453,
     "addresses": {
-      "ZKPassportNFT": "0xe9d1d4fb7615f9bd879d70c70daa07a2a05fc834",
-      "FaucetManager": "0xe9b78619c4ef60d8aec9fe6572991c03432de130",
-      "Swag1155": "0xe132daa0e39299260c35399e57e20ac837729b9f",
-      "SwagFactory": "0xeed15d56c47f164859c5c19118cd444eb58b6b00"
+      "ZKPassportNFT": "0xa3f1150a8414b0383244e7c7936119e3e24d106d",
+      "FaucetManager": "0x145d0d587bce7e390750cd67301e02478c51b48c",
+      "Swag1155": "0xfc87358e017ec814fe94139af82e6f25b293d5b8",
+      "SwagFactory": "0x89fb2a22bbb309703019b34439ae70b7e6d81e96"
     }
   },
   "ethereum": {
@@ -20738,19 +20738,19 @@ export const ADDRESSES = {
   "unichain": {
     "chainId": 130,
     "addresses": {
-      "ZKPassportNFT": "0x8057dfc3d5aa4e6d66a2fc2c66f9282846a36a62",
-      "FaucetManager": "0xa2db0955b8e452a489b977e308b38691eb093f0c",
-      "Swag1155": "0x4437ac2399e7346d1cb47e7d0be19a67eec11a21",
-      "SwagFactory": "0xbd18bf96d5daf4f05ad3b2ff38108a57cc9ba309"
+      "ZKPassportNFT": "0xc2ddade57815220833c31ecab6f6e9de9c69df09",
+      "FaucetManager": "0xdf1be43ae0636ba6f9bc26f75ab6ba8d66a3ddc8",
+      "Swag1155": "0x5811f284e340f6968bcffe2415e582e0eb429981",
+      "SwagFactory": "0x79abd2dabe18fa1086e210c41b622ed6011e0c85"
     }
   },
   "optimism": {
     "chainId": 10,
     "addresses": {
-      "ZKPassportNFT": "0x01401f4802bcd0e1ee4fa7e42a1b7f48ab82d121",
-      "FaucetManager": "0x016d7d55708f7b7b39693e2b46d69f290537420b",
-      "Swag1155": "0x7a61c947a59a6b9364928af60341b50c1fb83439",
-      "SwagFactory": "0x18b581aba74e0068b60b3af00814b8293b837a60"
+      "ZKPassportNFT": "0x607003f188c49ed6e0553805734b9990393402df",
+      "FaucetManager": "0x2940e286b41d279b61e484b98a08498e355e4778",
+      "Swag1155": "0xd9663db045850171850fd1298a2176b329a67928",
+      "SwagFactory": "0x94b9f649f8825d5d797e37d04dfc66d612750b10"
     }
   }
 } as const;

@@ -93,9 +93,9 @@ function MyComponent({ chainId }: { chainId: number }) {
 ## Deployed Networks
 
 - **Base Mainnet** (Chain ID: 8453)
-  - ZKPassportNFT: `0xe9d1d4fb7615f9bd879d70c70daa07a2a05fc834`
-  - FaucetManager: `0xe9b78619c4ef60d8aec9fe6572991c03432de130`
-  - Swag1155: `0xe132daa0e39299260c35399e57e20ac837729b9f`
+  - ZKPassportNFT: `0xa3f1150a8414b0383244e7c7936119e3e24d106d`
+  - FaucetManager: `0x145d0d587bce7e390750cd67301e02478c51b48c`
+  - Swag1155: `0xfc87358e017ec814fe94139af82e6f25b293d5b8`
 
 - **Ethereum Mainnet** (Chain ID: 1)
   - ZKPassportNFT: `0x607003f188c49ed6e0553805734b9990393402df`
@@ -103,14 +103,14 @@ function MyComponent({ chainId }: { chainId: number }) {
   - Swag1155: `0xd9663db045850171850fd1298a2176b329a67928`
 
 - **Unichain Mainnet** (Chain ID: 130)
-  - ZKPassportNFT: `0x8057dfc3d5aa4e6d66a2fc2c66f9282846a36a62`
-  - FaucetManager: `0xa2db0955b8e452a489b977e308b38691eb093f0c`
-  - Swag1155: `0x4437ac2399e7346d1cb47e7d0be19a67eec11a21`
+  - ZKPassportNFT: `0xc2ddade57815220833c31ecab6f6e9de9c69df09`
+  - FaucetManager: `0xdf1be43ae0636ba6f9bc26f75ab6ba8d66a3ddc8`
+  - Swag1155: `0x5811f284e340f6968bcffe2415e582e0eb429981`
 
 - **Optimism Mainnet** (Chain ID: 10)
-  - ZKPassportNFT: `0x01401f4802bcd0e1ee4fa7e42a1b7f48ab82d121`
-  - FaucetManager: `0x016d7d55708f7b7b39693e2b46d69f290537420b`
-  - Swag1155: `0x7a61c947a59a6b9364928af60341b50c1fb83439`
+  - ZKPassportNFT: `0x607003f188c49ed6e0553805734b9990393402df`
+  - FaucetManager: `0x2940e286b41d279b61e484b98a08498e355e4778`
+  - Swag1155: `0xd9663db045850171850fd1298a2176b329a67928`
 
 ## Default Network
 

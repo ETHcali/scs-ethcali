@@ -1,5 +1,5 @@
 // Auto-generated contract addresses and types for Ethereum Mainnet
-// Generated: 2026-03-06T05:53:24.306Z
+// Generated: 2026-03-06T06:21:43.285Z
 export const CONTRACTS = {
   "network": "ethereum",
   "chainId": 1,
