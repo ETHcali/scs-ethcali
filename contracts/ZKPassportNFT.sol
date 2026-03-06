@@ -6,116 +6,135 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
+import "./interfaces/IZKPassport.sol";
 
 /**
  * @title ZKPassportNFT
- * @notice Soulbound ERC721 NFT representing ZKPassport verification
- * @dev NFTs are soulbound (non-transferable). Supports IPFS image or on-chain SVG.
- *      Owner is set at deployment via constructor parameter.
+ * @notice Soulbound ERC721 representing a cryptographically verified ZKPassport identity.
+ *         Proofs are verified on-chain by the ZKPassport verifier contract.
+ *         Stores: unique identifier (bytes32), personhood status, age 18+ flag, nationality.
+ * @dev Deployed on Base and Ethereum Mainnet where the ZKPassport verifier is live.
+ *      The verifier address is updatable by the owner for future network expansion.
  */
 contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
     using Strings for uint256;
 
-    // Mapping to store approved verification data
-    mapping(string => VerificationData) public approvedVerifications;
+    // ── ZKPassport verifier ───────────────────────────────────────────────────
 
-    // Struct to store verification results from backend
-    struct VerificationData {
-        address userAddress;
-        bool faceMatchPassed;
-        bool personhoodVerified;
-        bool isApproved;
-    }
+    /// @notice Deterministic ZKPassport verifier address (Base + Ethereum Mainnet)
+    address public constant ZKPASSPORT_VERIFIER_ADDRESS =
+        0x1D000001000EFD9a6371f4d90bB8920D5431c0D8;
 
-    // Mapping to prevent duplicate uniqueIdentifiers
-    mapping(string => bool) private _usedIdentifiers;
+    /// @notice Active verifier instance (owner-updatable for future chain support)
+    IZKPassportVerifier public zkPassportVerifier;
 
-    // Mapping to prevent multiple NFTs per address
-    mapping(address => bool) private _hasNFT;
+    /// @notice Domain used in the SDK query — must match exactly
+    string public domain;
 
-    // Mapping to store token data
-    mapping(uint256 => TokenData) private _tokenData;
+    /// @notice Scope used in the SDK query — must match exactly
+    string public scope;
 
-    // Token counter
-    uint256 private _tokenIdCounter;
-
-    // NFT Metadata configuration (admin-settable)
-    string public nftImageURI;          // IPFS URI for NFT image (e.g., "ipfs://Qm...")
-    string public nftDescription;       // Description for all NFTs
-    string public nftExternalURL;       // External URL (e.g., ethcali website)
-    bool public useIPFSImage;           // If true, use IPFS image; if false, use on-chain SVG
+    // ── Token storage ─────────────────────────────────────────────────────────
 
     struct TokenData {
-        string uniqueIdentifier;
-        bool faceMatchPassed;
-        bool personhoodVerified;
+        bytes32 uniqueIdentifier;  // Scoped nullifier returned by the verifier
+        bool    personhoodVerified; // Always true for minted tokens
+        bool    isOver18;           // From helper.isAgeAboveOrEqual(18, ...)
+        string  nationality;        // From helper.getDisclosedData(...).nationality
     }
 
-    // Events
+    mapping(bytes32 => bool)    private _usedIdentifiers;
+    mapping(address => bool)    private _hasNFT;
+    mapping(uint256 => TokenData) private _tokenData;
+    uint256 private _tokenIdCounter;
+
+    // ── NFT metadata (admin-settable) ─────────────────────────────────────────
+
+    string public nftImageURI;
+    string public nftDescription;
+    string public nftExternalURL;
+    bool   public useIPFSImage;
+
+    // ── Events ────────────────────────────────────────────────────────────────
+
     event NFTMinted(
         address indexed to,
         uint256 indexed tokenId,
-        string uniqueIdentifier,
-        bool faceMatchPassed,
-        bool personhoodVerified
-    );
-    event VerificationApproved(
-        string indexed uniqueIdentifier,
-        address indexed userAddress,
-        bool faceMatchPassed,
-        bool personhoodVerified
+        bytes32         uniqueIdentifier,
+        bool            isOver18,
+        string          nationality
     );
     event MetadataUpdated(string imageURI, string description, string externalURL, bool useIPFS);
+    event VerifierUpdated(address indexed newVerifier);
+
+    // ── Constructor ───────────────────────────────────────────────────────────
 
     /**
-     * @notice Constructor
-     * @param name NFT name
-     * @param symbol NFT symbol
-     * @param initialOwner Address to set as initial owner (use address(0) for deployer)
+     * @param name         ERC721 name
+     * @param symbol       ERC721 symbol
+     * @param initialOwner Contract owner (use address(0) for deployer)
+     * @param _domain      Domain registered with ZKPassport SDK (e.g. "ethcali.com")
+     * @param _scope       Scope used in the SDK query (e.g. "ethcali-verification")
      */
     constructor(
         string memory name,
         string memory symbol,
-        address initialOwner
+        address       initialOwner,
+        string memory _domain,
+        string memory _scope
     ) ERC721(name, symbol) Ownable(initialOwner == address(0) ? msg.sender : initialOwner) {
-        nftDescription = "ZKPassport Verification NFT - Proof of liveness and personhood respecting your privacy, enabling access to ETHCALI Smart Contracts.";
-        useIPFSImage = false;
+        zkPassportVerifier = IZKPassportVerifier(ZKPASSPORT_VERIFIER_ADDRESS);
+        domain             = _domain;
+        scope              = _scope;
+        nftDescription     = "ZKPassport Verification NFT - Cryptographic proof of identity enabling access to ETHCALI Smart Contracts.";
+        useIPFSImage       = false;
     }
 
-    // ============ Admin Metadata Functions ============
+    // ── Admin: verifier & query config ────────────────────────────────────────
 
     /**
-     * @notice Set the IPFS image URI for all NFTs
-     * @param imageURI IPFS URI (e.g., "ipfs://QmXyz...")
+     * @notice Update the ZKPassport verifier address (e.g. after a new deployment)
+     * @param verifierAddress New verifier contract address
      */
+    function setVerifier(address verifierAddress) external onlyOwner {
+        require(verifierAddress != address(0), "ZKPassportNFT: invalid verifier address");
+        zkPassportVerifier = IZKPassportVerifier(verifierAddress);
+        emit VerifierUpdated(verifierAddress);
+    }
+
+    /**
+     * @notice Update the SDK domain (must match the domain used to build the query)
+     */
+    function setDomain(string memory _domain) external onlyOwner {
+        require(bytes(_domain).length > 0, "ZKPassportNFT: empty domain");
+        domain = _domain;
+    }
+
+    /**
+     * @notice Update the SDK scope (must match the scope used to build the query)
+     */
+    function setScope(string memory _scope) external onlyOwner {
+        scope = _scope;
+    }
+
+    // ── Admin: NFT metadata ───────────────────────────────────────────────────
+
     function setImageURI(string memory imageURI) external onlyOwner {
         nftImageURI = imageURI;
         emit MetadataUpdated(imageURI, nftDescription, nftExternalURL, useIPFSImage);
     }
 
-    /**
-     * @notice Set the description for all NFTs
-     * @param description NFT description
-     */
     function setDescription(string memory description) external onlyOwner {
         require(bytes(description).length > 0, "ZKPassportNFT: empty description");
         nftDescription = description;
         emit MetadataUpdated(nftImageURI, description, nftExternalURL, useIPFSImage);
     }
 
-    /**
-     * @notice Set the external URL for all NFTs
-     * @param externalURL External URL (e.g., "https://ethcali.com")
-     */
     function setExternalURL(string memory externalURL) external onlyOwner {
         nftExternalURL = externalURL;
         emit MetadataUpdated(nftImageURI, nftDescription, externalURL, useIPFSImage);
     }
 
-    /**
-     * @notice Toggle between IPFS image and on-chain SVG
-     * @param useIPFS If true, use IPFS image; if false, use on-chain SVG
-     */
     function setUseIPFSImage(bool useIPFS) external onlyOwner {
         if (useIPFS) {
             require(bytes(nftImageURI).length > 0, "ZKPassportNFT: set image URI first");
@@ -124,185 +143,121 @@ contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
         emit MetadataUpdated(nftImageURI, nftDescription, nftExternalURL, useIPFS);
     }
 
-    /**
-     * @notice Set all metadata at once
-     * @param imageURI IPFS image URI
-     * @param description NFT description
-     * @param externalURL External URL
-     * @param useIPFS Whether to use IPFS image
-     */
     function setMetadata(
         string memory imageURI,
         string memory description,
         string memory externalURL,
-        bool useIPFS
+        bool          useIPFS
     ) external onlyOwner {
         require(bytes(description).length > 0, "ZKPassportNFT: empty description");
         if (useIPFS) {
             require(bytes(imageURI).length > 0, "ZKPassportNFT: empty image URI");
         }
-
-        nftImageURI = imageURI;
+        nftImageURI    = imageURI;
         nftDescription = description;
         nftExternalURL = externalURL;
-        useIPFSImage = useIPFS;
-
+        useIPFSImage   = useIPFS;
         emit MetadataUpdated(imageURI, description, externalURL, useIPFS);
     }
 
-    /**
-     * @notice Approve a verification for minting (backend only)
-     * @param uniqueIdentifier ZKPassport unique identifier
-     * @param userAddress Address that completed verification
-     * @param faceMatchPassed Whether face match verification passed
-     * @param personhoodVerified Whether personhood verification passed
-     */
-    function approveVerification(
-        string memory uniqueIdentifier,
-        address userAddress,
-        bool faceMatchPassed,
-        bool personhoodVerified
-    ) external onlyOwner {
-        require(bytes(uniqueIdentifier).length > 0, "ZKPassportNFT: empty identifier");
-        require(userAddress != address(0), "ZKPassportNFT: invalid address");
-        require(!_usedIdentifiers[uniqueIdentifier], "ZKPassportNFT: identifier already used");
-        require(!_hasNFT[userAddress], "ZKPassportNFT: address already has NFT");
-        require(!approvedVerifications[uniqueIdentifier].isApproved, "ZKPassportNFT: already approved");
-
-        approvedVerifications[uniqueIdentifier] = VerificationData({
-            userAddress: userAddress,
-            faceMatchPassed: faceMatchPassed,
-            personhoodVerified: personhoodVerified,
-            isApproved: true
-        });
-
-        emit VerificationApproved(uniqueIdentifier, userAddress, faceMatchPassed, personhoodVerified);
-    }
+    // ── Mint ──────────────────────────────────────────────────────────────────
 
     /**
-     * @notice Self-verify and mint NFT directly with ZKPassport verification data
-     * @param uniqueIdentifier ZKPassport unique identifier
-     * @param faceMatchPassed Whether face matching verification passed
-     * @param personhoodVerified Whether personhood verification passed
+     * @notice Mint a ZKPassport NFT by submitting a ZK proof verified on-chain.
+     *         The proof must be generated by the ZKPassport SDK with:
+     *           .gte("age", 18).disclose("nationality").done()
+     *         and bound to msg.sender + block.chainid.
+     * @param params   Proof parameters produced by zkPassport.getSolidityVerifierParameters()
+     * @param isIDCard True if the document is an ID card / residence permit; false for passport
      */
-    function mintWithVerification(
-        string memory uniqueIdentifier,
-        bool faceMatchPassed,
-        bool personhoodVerified
-    ) external {
-        require(bytes(uniqueIdentifier).length > 0, "ZKPassportNFT: empty identifier");
-        require(!_usedIdentifiers[uniqueIdentifier], "ZKPassportNFT: identifier already used");
+    function mint(ProofVerificationParams calldata params, bool isIDCard) external {
         require(!_hasNFT[msg.sender], "ZKPassportNFT: address already has NFT");
-        
-        // In a production environment, you would verify ZKPassport proofs here
-        // For now, we'll trust the user's verification data
-        // TODO: Integrate ZKPassport proof verification on-chain
 
-        uint256 tokenId = _tokenIdCounter;
-        _tokenIdCounter++;
+        // 1. Verify the ZK proof on-chain
+        (bool verified, bytes32 uniqueIdentifier, IZKPassportHelper helper) =
+            zkPassportVerifier.verify(params);
+        require(verified, "ZKPassportNFT: proof verification failed");
+        require(!_usedIdentifiers[uniqueIdentifier], "ZKPassportNFT: identifier already used");
 
+        // 2. Verify domain + scope match this deployment
+        require(
+            helper.verifyScopes(params.proofVerificationData.publicInputs, domain, scope),
+            "ZKPassportNFT: invalid domain or scope"
+        );
+
+        // 3. Verify the proof is bound to the caller and this chain
+        BoundData memory boundData = helper.getBoundData(params.committedInputs);
+        require(boundData.senderAddress == msg.sender, "ZKPassportNFT: sender address mismatch");
+        require(boundData.chainId == block.chainid,    "ZKPassportNFT: chain id mismatch");
+
+        // 4. Extract verified claims
+        bool isOver18 = helper.isAgeAboveOrEqual(18, params.committedInputs);
+        DisclosedData memory disclosed = helper.getDisclosedData(params.committedInputs, isIDCard);
+
+        // 5. Mint
+        uint256 tokenId = _tokenIdCounter++;
         _usedIdentifiers[uniqueIdentifier] = true;
         _hasNFT[msg.sender] = true;
         _tokenData[tokenId] = TokenData({
-            uniqueIdentifier: uniqueIdentifier,
-            faceMatchPassed: faceMatchPassed,
-            personhoodVerified: personhoodVerified
+            uniqueIdentifier:  uniqueIdentifier,
+            personhoodVerified: true,
+            isOver18:          isOver18,
+            nationality:       disclosed.nationality
         });
 
         _safeMint(msg.sender, tokenId);
         _setTokenURI(tokenId, _generateTokenURI(tokenId));
 
-        emit NFTMinted(msg.sender, tokenId, uniqueIdentifier, faceMatchPassed, personhoodVerified);
+        emit NFTMinted(msg.sender, tokenId, uniqueIdentifier, isOver18, disclosed.nationality);
     }
 
-    /**
-     * @notice Legacy mint function for backward compatibility (now deprecated)
-     * @param uniqueIdentifier ZKPassport unique identifier that was approved
-     */
-    function mint(string memory uniqueIdentifier) external {
-        require(bytes(uniqueIdentifier).length > 0, "ZKPassportNFT: empty identifier");
-        
-        VerificationData memory verification = approvedVerifications[uniqueIdentifier];
-        require(verification.isApproved, "ZKPassportNFT: verification not approved");
-        require(verification.userAddress == msg.sender, "ZKPassportNFT: not authorized for this verification");
-        require(!_usedIdentifiers[uniqueIdentifier], "ZKPassportNFT: identifier already used");
-        require(!_hasNFT[msg.sender], "ZKPassportNFT: address already has NFT");
-
-        uint256 tokenId = _tokenIdCounter;
-        _tokenIdCounter++;
-
-        _usedIdentifiers[uniqueIdentifier] = true;
-        _hasNFT[msg.sender] = true;
-        _tokenData[tokenId] = TokenData({
-            uniqueIdentifier: uniqueIdentifier,
-            faceMatchPassed: verification.faceMatchPassed,
-            personhoodVerified: verification.personhoodVerified
-        });
-
-        // Clear the approval to prevent reuse
-        delete approvedVerifications[uniqueIdentifier];
-
-        _safeMint(msg.sender, tokenId);
-        _setTokenURI(tokenId, _generateTokenURI(tokenId));
-
-        emit NFTMinted(msg.sender, tokenId, uniqueIdentifier, verification.faceMatchPassed, verification.personhoodVerified);
-    }
+    // ── View functions ────────────────────────────────────────────────────────
 
     /**
-     * @notice Check if an identifier has been used
-     * @param uniqueIdentifier The identifier to check
-     * @return True if the identifier has been used
+     * @notice Check whether a ZKPassport scoped nullifier has already been used
+     * @param uniqueIdentifier bytes32 identifier returned by the verifier
      */
-    function hasNFT(string memory uniqueIdentifier) external view returns (bool) {
+    function hasNFTByIdentifier(bytes32 uniqueIdentifier) external view returns (bool) {
         return _usedIdentifiers[uniqueIdentifier];
     }
 
     /**
-     * @notice Check if an address has an NFT
-     * @param user The address to check
-     * @return True if the address has an NFT
+     * @notice Check whether an address already holds an NFT
      */
     function hasNFTByAddress(address user) external view returns (bool) {
         return _hasNFT[user];
     }
 
     /**
-     * @notice Get token data
-     * @param tokenId The token ID
-     * @return TokenData struct with verification results
+     * @notice Return the verified data stored for a token
      */
     function getTokenData(uint256 tokenId) external view returns (TokenData memory) {
         require(_ownerOf(tokenId) != address(0), "ZKPassportNFT: token does not exist");
         return _tokenData[tokenId];
     }
 
-    /**
-     * @notice Override transfer functions to make NFT soulbound
-     */
-    function _update(address to, uint256 tokenId, address auth) internal override(ERC721) returns (address) {
-        // Allow minting (from address(0))
+    // ── Soulbound ─────────────────────────────────────────────────────────────
+
+    function _update(address to, uint256 tokenId, address auth)
+        internal
+        override(ERC721)
+        returns (address)
+    {
         if (auth == address(0)) {
-            return super._update(to, tokenId, auth);
+            return super._update(to, tokenId, auth); // minting is allowed
         }
-        // Prevent all transfers (soulbound)
         revert("ZKPassportNFT: soulbound token - transfers not allowed");
     }
 
-    /**
-     * @notice Generate token URI with metadata
-     * @param tokenId The token ID
-     * @return Base64 encoded JSON metadata
-     */
+    // ── Metadata generation ───────────────────────────────────────────────────
+
     function _generateTokenURI(uint256 tokenId) private view returns (string memory) {
         TokenData memory data = _tokenData[tokenId];
 
-        // Determine image source
         string memory imageData;
         if (useIPFSImage && bytes(nftImageURI).length > 0) {
-            // Use IPFS image directly
             imageData = string(abi.encodePacked('"image":"', nftImageURI, '"'));
         } else {
-            // Use on-chain SVG
             string memory svg = _generateSVG(tokenId, data);
             imageData = string(abi.encodePacked(
                 '"image":"data:image/svg+xml;base64,',
@@ -311,7 +266,6 @@ contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
             ));
         }
 
-        // Build external URL if set
         string memory externalUrlData = "";
         if (bytes(nftExternalURL).length > 0) {
             externalUrlData = string(abi.encodePacked(',"external_url":"', nftExternalURL, '"'));
@@ -329,14 +283,17 @@ contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
                         imageData,
                         externalUrlData,
                         ',"attributes":[',
-                        '{"trait_type":"Face Match","value":"',
-                        data.faceMatchPassed ? "Passed" : "Failed",
-                        '"},',
                         '{"trait_type":"Personhood","value":"',
                         data.personhoodVerified ? "Verified" : "Not Verified",
                         '"},',
+                        '{"trait_type":"Age 18+","value":"',
+                        data.isOver18 ? "Yes" : "No",
+                        '"},',
+                        '{"trait_type":"Nationality","value":"',
+                        data.nationality,
+                        '"},',
                         '{"trait_type":"Verification Status","value":"',
-                        (data.faceMatchPassed && data.personhoodVerified) ? "Fully Verified" : "Partial",
+                        (data.personhoodVerified && data.isOver18) ? "Fully Verified" : "Verified",
                         '"},',
                         '{"trait_type":"Token ID","value":"',
                         tokenId.toString(),
@@ -350,17 +307,11 @@ contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
         return string(abi.encodePacked("data:application/json;base64,", json));
     }
 
-    /**
-     * @notice Generate SVG image for the NFT
-     * @param tokenId The token ID
-     * @param data The token data
-     * @return SVG string
-     */
     function _generateSVG(uint256 tokenId, TokenData memory data) private pure returns (string memory) {
-        string memory faceMatchColor = data.faceMatchPassed ? "#10b981" : "#ef4444";
+        string memory ageColor        = data.isOver18 ? "#10b981" : "#ef4444";
         string memory personhoodColor = data.personhoodVerified ? "#10b981" : "#ef4444";
-        string memory faceMatchText = data.faceMatchPassed ? "Passed" : "Failed";
-        string memory personhoodText = data.personhoodVerified ? "Verified" : "Not Verified";
+        string memory ageText         = data.isOver18 ? "Yes" : "No";
+        string memory personhoodText  = data.personhoodVerified ? "Verified" : "Not Verified";
 
         return string(
             abi.encodePacked(
@@ -371,30 +322,43 @@ contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
                 tokenId.toString(),
                 '</text>',
                 '<circle cx="200" cy="180" r="50" fill="#3b82f6" opacity="0.3"/>',
-                '<text x="200" y="190" font-family="Arial, sans-serif" font-size="32" fill="#3b82f6" text-anchor="middle">OK</text>',
+                '<text x="200" y="190" font-family="Arial, sans-serif" font-size="32" fill="#3b82f6" text-anchor="middle">ZK</text>',
                 '<text x="200" y="260" font-family="Arial, sans-serif" font-size="18" fill="',
-                faceMatchColor,
-                '" text-anchor="middle">Face Match: ',
-                faceMatchText,
-                '</text>',
-                '<text x="200" y="290" font-family="Arial, sans-serif" font-size="18" fill="',
                 personhoodColor,
                 '" text-anchor="middle">Personhood: ',
                 personhoodText,
                 '</text>',
-                '<text x="200" y="350" font-family="Arial, sans-serif" font-size="12" fill="#6b7280" text-anchor="middle">ETHCALI</text>',
+                '<text x="200" y="290" font-family="Arial, sans-serif" font-size="18" fill="',
+                ageColor,
+                '" text-anchor="middle">Age 18+: ',
+                ageText,
+                '</text>',
+                '<text x="200" y="320" font-family="Arial, sans-serif" font-size="14" fill="#9ca3af" text-anchor="middle">',
+                data.nationality,
+                '</text>',
+                '<text x="200" y="370" font-family="Arial, sans-serif" font-size="12" fill="#6b7280" text-anchor="middle">ETHCALI</text>',
                 '</svg>'
             )
         );
     }
 
-    // Override tokenURI to use our generated URI
-    function tokenURI(uint256 tokenId) public view override(ERC721, ERC721URIStorage) returns (string memory) {
+    // ── Overrides ─────────────────────────────────────────────────────────────
+
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        override(ERC721, ERC721URIStorage)
+        returns (string memory)
+    {
         return super.tokenURI(tokenId);
     }
 
-    // Override supportsInterface
-    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721URIStorage) returns (bool) {
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721, ERC721URIStorage)
+        returns (bool)
+    {
         return super.supportsInterface(interfaceId);
     }
 }

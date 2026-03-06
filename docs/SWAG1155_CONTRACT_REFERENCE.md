@@ -3,8 +3,8 @@
 **Complete API reference** for frontend integration with the Swag1155 ERC-1155 smart contract.
 
 **Contract**: `contracts/Swag1155.sol`
-**Version**: 2.2 (with Discount System)
-**Last Updated**: February 2026
+**Version**: 2.3 (POAP Whitelist + Serial Numbers)
+**Last Updated**: March 2026
 
 ---
 
@@ -27,12 +27,13 @@
 ## Overview
 
 Swag1155 is an ERC-1155 multi-token contract for managing physical merchandise (swag) with:
-- **USDC payments** (6 decimals)
+- **ERC20 payments** (any token, e.g. USDC 6 decimals)
 - **Role-based access** (DEFAULT_ADMIN_ROLE, ADMIN_ROLE)
 - **Per-token metadata** (IPFS URIs)
 - **Physical redemption tracking** (3-state flow)
 - **Royalty distribution** (automatic payment splits to artists)
-- **Dynamic discount system** (POAP-based and token holder discounts)
+- **Dynamic discount system** (POAP address whitelist and token holder discounts)
+- **Serial numbers** (unique per-unit identifier assigned at mint time)
 
 **Note:** When users purchase swag, payments are automatically split between royalty recipients (e.g., artists) and the treasury. The buyer only needs to approve the total USDC amount. Discounts are automatically applied based on POAP ownership and token holdings, and can stack additively up to 100% off.
 
@@ -253,27 +254,23 @@ Swag1155 supports a flexible discount system that allows admins to configure per
 
 ### Constructor
 
-The contract constructor now requires 5 parameters:
+The contract constructor takes 4 parameters (POAP_CONTRACT was removed — POAP eligibility is now managed via the `poapWhitelist` mapping):
 
 ```solidity
 constructor(
+    string memory baseURI,
     address _usdc,
     address _treasury,
-    address initialAdmin,
-    address superAdmin,
-    address _poap
+    address initialAdmin
 )
 ```
 
 | Parameter | Type | Description | Example |
-|-----------|------|-------------|---------|
+|-----------|------|-------------|--------|
+| `baseURI` | `string` | Base URI for token metadata | `"ipfs://"` |
 | `_usdc` | `address` | USDC token contract address | `0xUSDC...` |
 | `_treasury` | `address` | Treasury wallet address | `0xTreasury...` |
-| `initialAdmin` | `address` | Initial admin with ADMIN_ROLE | `0xAdmin...` |
-| `superAdmin` | `address` | Super admin with DEFAULT_ADMIN_ROLE | `0xSuperAdmin...` |
-| `_poap` | `address` | POAP contract address (immutable) | `0xPOAP...` |
-
-The `_poap` parameter sets the immutable `POAP_CONTRACT` state variable used for POAP discount validation.
+| `initialAdmin` | `address` | Admin with DEFAULT_ADMIN_ROLE + ADMIN_ROLE | `0xAdmin...` |
 
 ---
 
@@ -668,13 +665,15 @@ const handlePurchase = async () => {
 
 | Variable | Type | Description | Frontend Read |
 |----------|------|-------------|---------------|
-| `usdc` | `address` | USDC token contract address | `useReadContract({ functionName: 'usdc' })` |
-| `treasury` | `address` | Address receiving USDC payments | `useReadContract({ functionName: 'treasury' })` |
-| `POAP_CONTRACT` | `address` | POAP token contract address (immutable) | `useReadContract({ functionName: 'POAP_CONTRACT' })` |
+| `usdc` | `address` | Payment token contract address (any ERC20) | `useReadContract({ functionName: 'usdc' })` |
+| `treasury` | `address` | Address receiving payments | `useReadContract({ functionName: 'treasury' })` |
 | `variants` | `mapping(uint256 => Variant)` | Product variant data by tokenId | `useReadContract({ functionName: 'variants', args: [tokenId] })` |
 | `redemptions` | `mapping(uint256 => mapping(address => RedemptionStatus))` | Redemption status by tokenId and owner | `useReadContract({ functionName: 'redemptions', args: [tokenId, owner] })` |
 | `royaltyRecipients` | `mapping(uint256 => RoyaltyInfo[])` | Array of royalty recipients per tokenId | `useReadContract({ functionName: 'royaltyRecipients', args: [tokenId, index] })` |
 | `totalRoyaltyBps` | `mapping(uint256 => uint256)` | Total royalty basis points per tokenId | `useReadContract({ functionName: 'totalRoyaltyBps', args: [tokenId] })` |
+| `poapWhitelist` | `mapping(uint256 => mapping(uint256 => mapping(address => bool)))` | POAP discount eligibility — `[tokenId][eventId][address]` | `useReadContract({ functionName: 'poapWhitelist', args: [tokenId, eventId, address] })` |
+| `nextSerial` | `mapping(uint256 => uint256)` | Highest serial number assigned per tokenId | `useReadContract({ functionName: 'nextSerial', args: [tokenId] })` |
+| `serialOwner` | `mapping(uint256 => mapping(uint256 => address))` | Buyer address per serial — `[tokenId][serial]` | `useReadContract({ functionName: 'serialOwner', args: [tokenId, serial] })` |
 
 ### Constants
 
@@ -1442,6 +1441,46 @@ const { data: balance } = useReadContract({
 
 ---
 
+### getSerialOwner
+
+Look up the buyer address that owns a specific serial number.
+
+```solidity
+function getSerialOwner(uint256 tokenId, uint256 serial) external view returns (address)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `tokenId` | `uint256` | The variant/size token ID |
+| `serial` | `uint256` | The serial number (1-indexed, assigned at mint time) |
+
+**Returns:** `address` — buyer address that owns this unit; `address(0)` if not yet minted
+
+**Frontend:**
+```typescript
+// Look up who owns serial #42 of size M (tokenId 2)
+const { data: owner } = useReadContract({
+  address: swag1155,
+  abi: Swag1155ABI,
+  functionName: 'getSerialOwner',
+  args: [2n, 42n],
+});
+// owner = "0xAbc..." or "0x000..." if not minted
+```
+
+**Fulfillment use case:**
+```typescript
+// Admin: list all buyers for a tokenId by iterating serials 1..nextSerial
+const totalMinted = await readContract({ functionName: 'nextSerial', args: [tokenId] });
+const buyers = [];
+for (let serial = 1n; serial <= totalMinted; serial++) {
+  const owner = await readContract({ functionName: 'getSerialOwner', args: [tokenId, serial] });
+  buyers.push({ serial, owner });
+}
+```
+
+---
+
 ## Events
 
 ### Purchase Events
@@ -1485,6 +1524,24 @@ const { data: balance } = useReadContract({
 | `HolderDiscountAdded` | `tokenId`, `token`, `discountType`, `value` | Admin calls `addHolderDiscount()` |
 | `HolderDiscountRemoved` | `tokenId`, `token` | Admin calls `removeHolderDiscount()` |
 | `DiscountApplied` | `buyer`, `tokenId`, `originalPrice`, `finalPrice` | User purchases with discount via `buy()` or `buyBatch()` |
+| `PoapWhitelistUpdated` | `tokenId`, `eventId`, `addresses[]`, `added` | Admin calls `addPoapWhitelist()` or `removePoapWhitelist()` |
+
+### Serial Number Events
+
+| Event | Parameters | When Emitted |
+|-------|------------|--------------|
+| `SerialMinted` | `buyer` *(indexed)*, `tokenId` *(indexed)*, `serial` *(indexed)* | One per unit on every `buy()` or `buyBatch()` call |
+
+**Fulfillment workflow — listen for SerialMinted:**
+```typescript
+// Off-chain: build serial → buyer map from events
+const logs = await publicClient.getLogs({
+  address: swag1155,
+  event: parseAbiItem('event SerialMinted(address indexed buyer, uint256 indexed tokenId, uint256 indexed serial)'),
+  fromBlock: deployBlock,
+});
+// logs[i].args = { buyer: '0x...', tokenId: 2n, serial: 7n }
+```
 
 **Frontend Event Listening:**
 ```typescript

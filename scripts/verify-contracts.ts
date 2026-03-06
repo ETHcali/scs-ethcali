@@ -10,6 +10,7 @@ interface DeploymentResult {
   zkPassportNFT: string;
   faucetManager: string;
   swag1155: string;
+  swagFactory?: string;
   network: string;
   timestamp: string;
   config: {
@@ -52,6 +53,7 @@ async function main() {
   console.log(`   ZKPassportNFT:  ${deployment.zkPassportNFT}`);
   console.log(`   FaucetManager:  ${deployment.faucetManager}`);
   console.log(`   Swag1155:       ${deployment.swag1155}`);
+  if (deployment.swagFactory)     console.log(`   SwagFactory:    ${deployment.swagFactory}`);
 
   console.log(`\n📋 Config (from deployment):`);
   console.log(`   Owner/Admin:    ${deployment.config.zkPassportAdmin}`);
@@ -102,24 +104,37 @@ async function main() {
 
   // Verify Swag1155
   console.log(`\n📝 Verifying Swag1155 at ${deployment.swag1155}...`);
-  const POAP_ADDRESS = "0x22C1f6050E56d2876009903609a2cC3fEf83B415";
   const swagArgs = [
-    "ipfs://",  // baseURI - must match deploy script
+    "ipfs://",                        // baseURI — must match deploy script
     deployment.config.usdcAddress,
     deployment.config.swagTreasury,
     deployment.config.swagAdmin,
-    POAP_ADDRESS,
   ];
   console.log(`   Constructor args: ${JSON.stringify(swagArgs)}`);
 
   try {
     execSync(
-      `npx hardhat verify --network ${networkName} ${deployment.swag1155} "${swagArgs[0]}" "${swagArgs[1]}" "${swagArgs[2]}" "${swagArgs[3]}" "${swagArgs[4]}"`,
+      `npx hardhat verify --network ${networkName} ${deployment.swag1155} "${swagArgs[0]}" "${swagArgs[1]}" "${swagArgs[2]}" "${swagArgs[3]}"`,
       { stdio: "inherit", cwd: join(__dirname, "..") }
     );
     console.log(`✅ Swag1155 verified`);
   } catch (error: any) {
     console.log(`ℹ️  Swag1155 verification attempted (may already be verified or failed)`);
+  }
+
+  // Verify SwagFactory (direct deploy — constructor arg is swagAdmin)
+  if (deployment.swagFactory) {
+    console.log(`\n📝 Verifying SwagFactory at ${deployment.swagFactory}...`);
+    console.log(`   Constructor arg: ${deployment.config.swagAdmin}`);
+    try {
+      execSync(
+        `npx hardhat verify --network ${networkName} ${deployment.swagFactory} "${deployment.config.swagAdmin}"`,
+        { stdio: "inherit", cwd: join(__dirname, "..") }
+      );
+      console.log(`✅ SwagFactory verified`);
+    } catch (error: any) {
+      console.log(`ℹ️  SwagFactory verification attempted (may already be verified or failed)`);
+    }
   }
 
   console.log(`\n✅ Verification complete for ${networkName}!`);
@@ -137,7 +152,7 @@ async function main() {
     console.log(`   ZKPassportNFT:  ${explorerUrl}/${deployment.zkPassportNFT}`);
     console.log(`   FaucetManager:  ${explorerUrl}/${deployment.faucetManager}`);
     console.log(`   Swag1155:       ${explorerUrl}/${deployment.swag1155}`);
-  }
+    if (deployment.swagFactory)     console.log(`   SwagFactory:    ${explorerUrl}/${deployment.swagFactory}`);  }
 }
 
 main().catch((error) => {

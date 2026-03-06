@@ -144,9 +144,6 @@ ZK_PASSPORT_ADMIN=0x...   # Owner for ZKPassportNFT (can manage metadata)
 # Treasury
 SWAG_TREASURY_ADDRESS=0x...  # Receives USDC payments (remainder after royalties)
 
-# POAP Contract (required for Swag1155)
-POAP_CONTRACT_ADDRESS=0x...  # POAP contract address (immutable after deployment)
-
 # Optional: NFT metadata (can be set post-deployment)
 NFT_IMAGE_URI=ipfs://...
 NFT_DESCRIPTION=Your description
@@ -184,7 +181,7 @@ npx hardhat run scripts/deploy-all.ts --network sepolia
 
 1. **ZKPassportNFT**: Deploys, then transfers ownership to `ZK_PASSPORT_ADMIN`
 2. **FaucetManager**: Deploys, grants admin roles to `FAUCET_ADMIN`
-3. **Swag1155**: Deploys with `SWAG_TREASURY_ADDRESS` and `POAP_CONTRACT_ADDRESS` (5th constructor parameter), grants admin roles to `SWAG_ADMIN`
+3. **Swag1155**: Deploys with `SWAG_TREASURY_ADDRESS` (4-param constructor), grants admin roles to `SWAG_ADMIN`
 
 ---
 

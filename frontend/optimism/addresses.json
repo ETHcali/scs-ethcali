@@ -1,0 +1,10 @@
+{
+  "network": "optimism",
+  "chainId": 10,
+  "addresses": {
+    "ZKPassportNFT": "0x01401f4802bcd0e1ee4fa7e42a1b7f48ab82d121",
+    "FaucetManager": "0x016d7d55708f7b7b39693e2b46d69f290537420b",
+    "Swag1155": "0x7a61c947a59a6b9364928af60341b50c1fb83439",
+    "SwagFactory": "0x18b581aba74e0068b60b3af00814b8293b837a60"
+  }
+}

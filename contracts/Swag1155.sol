@@ -9,10 +9,6 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-interface IPOAP {
-    function balanceOf(address owner, uint256 eventId) external view returns (uint256);
-}
-
 /**
  * @title ETH Cali Swag (ERC-1155)
  * @notice Admin-managed onchain inventory for swag using ERC-1155.
@@ -66,9 +62,6 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard {
 
     // ---------- Discount System ----------
 
-    // POAP contract address (0x22C1f6050E56d2876009903609a2cC3fEf83B415 on all chains)
-    address public immutable POAP_CONTRACT;
-
     enum DiscountType { Percentage, Fixed }
 
     struct PoapDiscount {
@@ -87,6 +80,14 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard {
     // Per-tokenId discount tiers
     mapping(uint256 => PoapDiscount[]) public poapDiscounts;
     mapping(uint256 => HolderDiscount[]) public holderDiscounts;
+
+    // POAP whitelist: tokenId => eventId => address => whitelisted
+    mapping(uint256 => mapping(uint256 => mapping(address => bool))) public poapWhitelist;
+
+    // Serial numbers: tokenId => next serial to assign (1-indexed)
+    mapping(uint256 => uint256) public nextSerial;
+    // Serial ownership: tokenId => serial => buyer address
+    mapping(uint256 => mapping(uint256 => address)) public serialOwner;
 
     // Track known tokenIds for optional iteration (not required but helpful)
     using EnumerableSet for EnumerableSet.UintSet;
@@ -110,6 +111,8 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard {
     event HolderDiscountAdded(uint256 indexed tokenId, address indexed token, DiscountType discountType, uint256 value);
     event HolderDiscountRemoved(uint256 indexed tokenId, address indexed token);
     event DiscountApplied(address indexed buyer, uint256 indexed tokenId, uint256 originalPrice, uint256 finalPrice);
+    event PoapWhitelistUpdated(uint256 indexed tokenId, uint256 indexed eventId, address[] addresses, bool added);
+    event SerialMinted(address indexed buyer, uint256 indexed tokenId, uint256 indexed serial);
 
     /**
      * @notice Constructor
@@ -122,14 +125,12 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard {
         string memory baseURI,
         address _usdc,
         address _treasury,
-        address initialAdmin,
-        address _poap
+        address initialAdmin
     ) ERC1155(baseURI) {
         require(_usdc != address(0), "invalid USDC");
         require(_treasury != address(0), "invalid treasury");
         usdc = _usdc;
         treasury = _treasury;
-        POAP_CONTRACT = _poap;
 
         address admin = initialAdmin == address(0) ? msg.sender : initialAdmin;
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
@@ -310,6 +311,44 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard {
     }
 
     /**
+     * @notice Add addresses to the POAP whitelist for a specific product and event
+     * @param tokenId Product token ID
+     * @param eventId POAP event ID (organizational key)
+     * @param addresses Array of addresses to whitelist (max ~100 per tx)
+     */
+    function addPoapWhitelist(uint256 tokenId, uint256 eventId, address[] calldata addresses) external onlyRole(ADMIN_ROLE) {
+        require(addresses.length > 0, "empty addresses");
+        for (uint256 i = 0; i < addresses.length; i++) {
+            poapWhitelist[tokenId][eventId][addresses[i]] = true;
+        }
+        emit PoapWhitelistUpdated(tokenId, eventId, addresses, true);
+    }
+
+    /**
+     * @notice Remove addresses from the POAP whitelist for a specific product and event
+     * @param tokenId Product token ID
+     * @param eventId POAP event ID (organizational key)
+     * @param addresses Array of addresses to remove
+     */
+    function removePoapWhitelist(uint256 tokenId, uint256 eventId, address[] calldata addresses) external onlyRole(ADMIN_ROLE) {
+        require(addresses.length > 0, "empty addresses");
+        for (uint256 i = 0; i < addresses.length; i++) {
+            poapWhitelist[tokenId][eventId][addresses[i]] = false;
+        }
+        emit PoapWhitelistUpdated(tokenId, eventId, addresses, false);
+    }
+
+    /**
+     * @notice Check if an address is whitelisted for a POAP discount
+     * @param tokenId Product token ID
+     * @param eventId POAP event ID
+     * @param buyer Address to check
+     */
+    function isPoapWhitelisted(uint256 tokenId, uint256 eventId, address buyer) external view returns (bool) {
+        return poapWhitelist[tokenId][eventId][buyer];
+    }
+
+    /**
      * @notice Add a token-holder discount for a specific product
      * @param tokenId Product token ID
      * @param token ERC20/ERC721 contract address
@@ -363,15 +402,13 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard {
         uint256 totalDiscountBps = 0;
         uint256 fixedDiscount = 0;
 
-        // Check POAP discounts (additive)
+        // Check POAP discounts (additive) — uses address whitelist
         PoapDiscount[] storage poaps = poapDiscounts[tokenId];
         for (uint256 i = 0; i < poaps.length; i++) {
             if (!poaps[i].active) continue;
-            try IPOAP(POAP_CONTRACT).balanceOf(buyer, poaps[i].eventId) returns (uint256 bal) {
-                if (bal > 0) {
-                    totalDiscountBps += poaps[i].discountBps;
-                }
-            } catch {}
+            if (poapWhitelist[tokenId][poaps[i].eventId][buyer]) {
+                totalDiscountBps += poaps[i].discountBps;
+            }
         }
 
         // Check holder discounts (additive)
@@ -419,6 +456,16 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard {
 
     function listTokenIds() external view returns (uint256[] memory) {
         return _tokenIds.values();
+    }
+
+    /**
+     * @notice Look up which address owns a specific serial number
+     * @param tokenId The variant/size token ID
+     * @param serial The serial number (1-indexed, assigned at mint time)
+     * @return The buyer address that owns this serial, address(0) if not minted
+     */
+    function getSerialOwner(uint256 tokenId, uint256 serial) external view returns (address) {
+        return serialOwner[tokenId][serial];
     }
 
     /**
@@ -483,6 +530,13 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard {
         v.minted += quantity;
         _mint(msg.sender, tokenId, quantity, "");
 
+        // Assign a unique serial number to each unit purchased
+        for (uint256 s = 0; s < quantity; s++) {
+            uint256 serial = ++nextSerial[tokenId];
+            serialOwner[tokenId][serial] = msg.sender;
+            emit SerialMinted(msg.sender, tokenId, serial);
+        }
+
         emit Purchased(msg.sender, tokenId, quantity, unitPrice, total);
         if (unitPrice < v.price) {
             emit DiscountApplied(msg.sender, tokenId, v.price, unitPrice);
@@ -516,6 +570,15 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard {
             v2.minted += quantities[i];
         }
         _mintBatch(msg.sender, tokenIds, quantities, "");
+
+        // Assign serial numbers for every unit in the batch
+        for (uint256 i = 0; i < len; i++) {
+            for (uint256 s = 0; s < quantities[i]; s++) {
+                uint256 serial = ++nextSerial[tokenIds[i]];
+                serialOwner[tokenIds[i]][serial] = msg.sender;
+                emit SerialMinted(msg.sender, tokenIds[i], serial);
+            }
+        }
 
         emit PurchasedBatch(msg.sender, tokenIds, quantities, grandTotal);
     }

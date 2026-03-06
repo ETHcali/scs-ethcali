@@ -11,7 +11,6 @@ describe("Swag1155", async function () {
 
   let usdc: any;
   let swag: any;
-  let mockPoap: any;
   let mockNft: any;
 
   const BASE_URI = "https://wallet.ethcali.org/metadata/{id}.json";
@@ -19,20 +18,18 @@ describe("Swag1155", async function () {
   before(async function () {
     // Deploy mocks
     usdc = await viem.deployContract("MockUSDC", []);
-    mockPoap = await viem.deployContract("MockPOAP", []);
     mockNft = await viem.deployContract("MockERC721", []);
 
     // Mint USDC to buyers
     await usdc.write.mint([buyer.account.address, USDC(1000)]);
     await usdc.write.mint([buyer2.account.address, USDC(1000)]);
 
-    // Deploy Swag1155 with deployer as initial admin + mock POAP
+    // Deploy Swag1155 with deployer as initial admin
     swag = await viem.deployContract("Swag1155", [
       BASE_URI,
       usdc.address,
       treasury.account.address,
       deployer.account.address, // initialAdmin
-      mockPoap.address,         // POAP contract
     ]);
   });
 
@@ -449,8 +446,8 @@ describe("Swag1155", async function () {
     await swag.write.setVariant([tokenId, price, 100n, true]);
     await swag.write.addPoapDiscount([tokenId, eventId, 1000n]); // 10%
 
-    // Give buyer a POAP
-    await mockPoap.write.mint([buyer.account.address, eventId]);
+    // Whitelist buyer for this POAP event
+    await swag.write.addPoapWhitelist([tokenId, eventId, [buyer.account.address]]);
 
     await usdc.write.approve([swag.address, USDC(200)], { account: buyer.account });
     const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
@@ -484,7 +481,7 @@ describe("Swag1155", async function () {
 
     await swag.write.setVariant([tokenId, price, 100n, true]);
     await swag.write.addPoapDiscount([tokenId, eventId, 5000n]); // 50%
-    await mockPoap.write.mint([buyer.account.address, eventId]);
+    await swag.write.addPoapWhitelist([tokenId, eventId, [buyer.account.address]]);
 
     // Remove the discount (index 0)
     await swag.write.removePoapDiscount([tokenId, 0n]);
@@ -560,8 +557,8 @@ describe("Swag1155", async function () {
     await swag.write.addPoapDiscount([tokenId, eventId, 1000n]); // 10%
     await swag.write.addHolderDiscount([tokenId, mockNft.address, 0, 2000n]); // 20%
 
-    // buyer has NFT (from earlier) + give POAP
-    await mockPoap.write.mint([buyer.account.address, eventId]);
+    // buyer has NFT (from earlier) + whitelist for POAP
+    await swag.write.addPoapWhitelist([tokenId, eventId, [buyer.account.address]]);
 
     await usdc.write.approve([swag.address, USDC(200)], { account: buyer.account });
     const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
@@ -581,7 +578,7 @@ describe("Swag1155", async function () {
     await swag.write.addPoapDiscount([tokenId, eventId, 5000n]); // 50%
     await swag.write.addHolderDiscount([tokenId, mockNft.address, 0, 5000n]); // 50%
 
-    await mockPoap.write.mint([buyer.account.address, eventId]);
+    await swag.write.addPoapWhitelist([tokenId, eventId, [buyer.account.address]]);
 
     const buyerUsdcBefore = await usdc.read.balanceOf([buyer.account.address]);
     await swag.write.buy([tokenId, 1n], { account: buyer.account });
@@ -604,7 +601,7 @@ describe("Swag1155", async function () {
     await swag.write.addPoapDiscount([tokenId, eventId, 6000n]); // 60%
     await swag.write.addHolderDiscount([tokenId, mockNft.address, 0, 6000n]); // 60%
 
-    await mockPoap.write.mint([buyer.account.address, eventId]);
+    await swag.write.addPoapWhitelist([tokenId, eventId, [buyer.account.address]]);
 
     const buyerUsdcBefore = await usdc.read.balanceOf([buyer.account.address]);
     await swag.write.buy([tokenId, 1n], { account: buyer.account });
@@ -623,7 +620,7 @@ describe("Swag1155", async function () {
     await swag.write.setVariant([tokenId, price, 100n, true]);
     await swag.write.addPoapDiscount([tokenId, eventId, 1500n]); // 15%
 
-    await mockPoap.write.mint([buyer.account.address, eventId]);
+    await swag.write.addPoapWhitelist([tokenId, eventId, [buyer.account.address]]);
 
     await usdc.write.approve([swag.address, USDC(200)], { account: buyer.account });
     const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
@@ -658,7 +655,7 @@ describe("Swag1155", async function () {
     await swag.write.addPoapDiscount([tokenId, eventId, 1000n]); // 10%
     await swag.write.addHolderDiscount([tokenId, mockNft.address, 0, 500n]); // 5%
 
-    await mockPoap.write.mint([buyer.account.address, eventId]);
+    await swag.write.addPoapWhitelist([tokenId, eventId, [buyer.account.address]]);
 
     const discounted = await swag.read.getDiscountedPrice([tokenId, buyer.account.address]);
     // 15% off 200 = 170
@@ -704,5 +701,110 @@ describe("Swag1155", async function () {
     const treasuryAfter = await usdc.read.balanceOf([treasury.account.address]);
 
     assert.equal(treasuryAfter - treasuryBefore, price);
+  });
+
+  // ==================== SERIAL NUMBER TESTS ====================
+
+  it("Single buy assigns serial #1 to buyer", async function () {
+    const tokenId = 801n;
+
+    await swag.write.setVariant([tokenId, USDC(10), 10n, true]);
+    await usdc.write.approve([swag.address, USDC(10)], { account: buyer.account });
+    await swag.write.buy([tokenId, 1n], { account: buyer.account });
+
+    const serial1Owner = await swag.read.getSerialOwner([tokenId, 1n]);
+    assert.equal(serial1Owner.toLowerCase(), buyer.account.address.toLowerCase());
+
+    const nextSerial = await swag.read.nextSerial([tokenId]);
+    assert.equal(nextSerial, 1n);
+  });
+
+  it("Buying quantity 3 assigns serials #1, #2, #3 sequentially", async function () {
+    const tokenId = 802n;
+
+    await swag.write.setVariant([tokenId, USDC(10), 10n, true]);
+    await usdc.write.approve([swag.address, USDC(50)], { account: buyer.account });
+    await swag.write.buy([tokenId, 3n], { account: buyer.account });
+
+    for (let s = 1n; s <= 3n; s++) {
+      const owner = await swag.read.getSerialOwner([tokenId, s]);
+      assert.equal(owner.toLowerCase(), buyer.account.address.toLowerCase());
+    }
+
+    const nextSerial = await swag.read.nextSerial([tokenId]);
+    assert.equal(nextSerial, 3n);
+  });
+
+  it("Two different buyers get distinct serials", async function () {
+    const tokenId = 803n;
+
+    await swag.write.setVariant([tokenId, USDC(10), 10n, true]);
+    await usdc.write.approve([swag.address, USDC(10)], { account: buyer.account });
+    await usdc.write.approve([swag.address, USDC(10)], { account: buyer2.account });
+
+    await swag.write.buy([tokenId, 1n], { account: buyer.account });
+    await swag.write.buy([tokenId, 1n], { account: buyer2.account });
+
+    const owner1 = await swag.read.getSerialOwner([tokenId, 1n]);
+    const owner2 = await swag.read.getSerialOwner([tokenId, 2n]);
+
+    assert.equal(owner1.toLowerCase(), buyer.account.address.toLowerCase());
+    assert.equal(owner2.toLowerCase(), buyer2.account.address.toLowerCase());
+
+    const nextSerial = await swag.read.nextSerial([tokenId]);
+    assert.equal(nextSerial, 2n);
+  });
+
+  it("Serial counter is independent per tokenId", async function () {
+    const tokenIdA = 804n;
+    const tokenIdB = 805n;
+
+    await swag.write.setVariant([tokenIdA, USDC(10), 10n, true]);
+    await swag.write.setVariant([tokenIdB, USDC(10), 10n, true]);
+    await usdc.write.approve([swag.address, USDC(50)], { account: buyer.account });
+
+    await swag.write.buy([tokenIdA, 2n], { account: buyer.account });
+    await swag.write.buy([tokenIdB, 1n], { account: buyer.account });
+
+    assert.equal(await swag.read.nextSerial([tokenIdA]), 2n);
+    assert.equal(await swag.read.nextSerial([tokenIdB]), 1n);
+
+    // Serial #1 of tokenIdB belongs to buyer, not affected by tokenIdA's counter
+    const ownerB1 = await swag.read.getSerialOwner([tokenIdB, 1n]);
+    assert.equal(ownerB1.toLowerCase(), buyer.account.address.toLowerCase());
+  });
+
+  it("Batch buy assigns serials across multiple tokenIds", async function () {
+    const tokenIdX = 806n;
+    const tokenIdY = 807n;
+
+    await swag.write.setVariant([tokenIdX, USDC(10), 10n, true]);
+    await swag.write.setVariant([tokenIdY, USDC(5), 10n, true]);
+    await usdc.write.approve([swag.address, USDC(50)], { account: buyer2.account });
+
+    // Buy 2 of X and 3 of Y in one batch
+    await swag.write.buyBatch([[tokenIdX, tokenIdY], [2n, 3n]], { account: buyer2.account });
+
+    assert.equal(await swag.read.nextSerial([tokenIdX]), 2n);
+    assert.equal(await swag.read.nextSerial([tokenIdY]), 3n);
+
+    // All serials belong to buyer2
+    for (let s = 1n; s <= 2n; s++) {
+      const owner = await swag.read.getSerialOwner([tokenIdX, s]);
+      assert.equal(owner.toLowerCase(), buyer2.account.address.toLowerCase());
+    }
+    for (let s = 1n; s <= 3n; s++) {
+      const owner = await swag.read.getSerialOwner([tokenIdY, s]);
+      assert.equal(owner.toLowerCase(), buyer2.account.address.toLowerCase());
+    }
+  });
+
+  it("Unassigned serial returns address(0)", async function () {
+    const tokenId = 808n;
+    await swag.write.setVariant([tokenId, USDC(10), 10n, true]);
+
+    // Nothing minted yet
+    const owner = await swag.read.getSerialOwner([tokenId, 1n]);
+    assert.equal(owner, "0x0000000000000000000000000000000000000000");
   });
 });

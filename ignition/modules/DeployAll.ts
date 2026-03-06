@@ -84,8 +84,18 @@ export default buildModule("CompleteSystem", (m) => {
 
   const swag1155 = m.contract("Swag1155", [baseURI, usdc, treasury, swagAdmin]);
 
+  // ===== 4. Deploy SwagFactory =====
+  console.log("📋 Step 4: Deploying SwagFactory...");
+
+  if (!swagAdmin) {
+    throw new Error("❌ SUPER_ADMIN_ADDRESS is required for SwagFactory deployment");
+  }
+
+  // Direct deploy — no proxy needed (factory holds no funds; registry rebuildable from events)
+  const swagFactory = m.contract("SwagFactory", [swagAdmin], { id: "SwagFactory" });
+
   console.log("\n" + "=".repeat(60));
   console.log("✅ All contracts configured for deployment!\n");
 
-  return { zkPassportNFT, faucetManager, swag1155 };
+  return { zkPassportNFT, faucetManager, swag1155, swagFactory };
 });

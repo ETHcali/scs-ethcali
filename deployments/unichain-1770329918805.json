@@ -1,10 +1,9 @@
 {
-  "zkPassportNFT": "0x8057dfc3d5aa4e6d66a2fc2c66f9282846a36a62",
-  "faucetManager": "0xa2db0955b8e452a489b977e308b38691eb093f0c",
-  "swag1155": "0x4437ac2399e7346d1cb47e7d0be19a67eec11a21",
-  "swagFactory": "0xbd18bf96d5daf4f05ad3b2ff38108a57cc9ba309",
+  "zkPassportNFT": "0x6771e17e804d4039f6affc4c464c5092f7d6e48c",
+  "faucetManager": "0xc9e5262aee85dbd0ccebcc22b461c7b853422411",
+  "swag1155": "0x3c01afb0d656611977f7ef5c891c10e50d2c7bfe",
   "network": "unichain",
-  "timestamp": "2026-03-06T05:52:58.088Z",
+  "timestamp": "2026-02-05T22:18:38.803Z",
   "config": {
     "network": "unichain",
     "swagAdmin": "0x3C9204B25966591749450FB233D58E850e7C1f9F",

@@ -37,6 +37,7 @@ interface DeploymentResult {
   zkPassportNFT: string;
   faucetManager: string;
   swag1155: string;
+  swagFactory: string;
   network: string;
   timestamp: string;
   config: DeploymentConfig;
@@ -143,6 +144,8 @@ async function main() {
     "ZKPassport Verification",
     "ZKPASS",
     config.zkPassportAdmin as `0x${string}`,
+    process.env.ZKPASSPORT_DOMAIN  || "ethcali.com",
+    process.env.ZKPASSPORT_SCOPE   || "ethcali-verification",
   ]);
   const zkPassportAddress = zkPassportNFT.address;
   console.log(`   ZKPassportNFT deployed: ${zkPassportAddress}`);
@@ -179,13 +182,11 @@ async function main() {
   // Deploy Swag1155
   console.log("\n📦 Deploying Swag1155...");
   console.log(`   Admin will be: ${config.swagAdmin}`);
-  const POAP_ADDRESS = "0x22C1f6050E56d2876009903609a2cC3fEf83B415";
   const swag1155 = await viem.deployContract("Swag1155", [
     "ipfs://",
     usdcAddress as `0x${string}`,
     config.swagTreasury as `0x${string}`,
     config.swagAdmin as `0x${string}`,
-    POAP_ADDRESS as `0x${string}`,
   ]);
   const swag1155Address = swag1155.address;
   console.log(`   Swag1155 deployed: ${swag1155Address}`);
@@ -193,26 +194,40 @@ async function main() {
   console.log(`   USDC: ${usdcAddress}`);
   console.log(`   ✅ Admin set to: ${config.swagAdmin}`);
 
+  // Deploy SwagFactory
+  console.log("\n📦 Deploying SwagFactory...");
+  console.log(`   Factory admin will be: ${config.swagAdmin}`);
+
+  const swagFactory = await viem.deployContract("SwagFactory", [
+    config.swagAdmin as `0x${string}`,
+  ]);
+  const swagFactoryAddress = swagFactory.address;
+  console.log(`   SwagFactory deployed: ${swagFactoryAddress}`);
+  console.log(`   ✅ Factory admin set to: ${config.swagAdmin}`);
+
   // Summary
   console.log("\n═══════════════════════════════════════════════════════════");
   console.log("                    DEPLOYMENT COMPLETE");
   console.log("═══════════════════════════════════════════════════════════");
   console.log(`\n📋 Contract Addresses:`);
-  console.log(`   ZKPassportNFT:  ${zkPassportAddress}`);
-  console.log(`   FaucetManager:  ${faucetManagerAddress}`);
-  console.log(`   Swag1155:       ${swag1155Address}`);
+  console.log(`   ZKPassportNFT:    ${zkPassportAddress}`);
+  console.log(`   FaucetManager:    ${faucetManagerAddress}`);
+  console.log(`   Swag1155:         ${swag1155Address}`);
+  console.log(`   SwagFactory:      ${swagFactoryAddress}`);
 
   console.log(`\n🔐 Security Configuration:`);
   console.log(`   ZKPassportNFT Owner: ${config.zkPassportAdmin}`);
   console.log(`   FaucetManager Admin: ${config.faucetAdmin}`);
   console.log(`   Swag1155 Admin:      ${config.swagAdmin}`);
   console.log(`   Swag1155 Treasury:   ${config.swagTreasury}`);
+  console.log(`   SwagFactory Admin:   ${config.swagAdmin}`);
 
   // Save deployment
   const result: DeploymentResult = {
     zkPassportNFT: zkPassportAddress,
     faucetManager: faucetManagerAddress,
     swag1155: swag1155Address,
+    swagFactory: swagFactoryAddress,
     network: config.network,
     timestamp: new Date().toISOString(),
     config,
@@ -242,6 +257,11 @@ Swag1155 (Admin: ${config.swagAdmin}):
   - setTreasury(address)   - Change treasury wallet
   - setUSDC(address)       - Change USDC contract
   - setVariantWithURI(...) - Create products
+
+SwagFactory (${swagFactoryAddress}):
+  - deployCollection(name, sku, paymentToken, treasury, itemAdmin, sizes[])
+  - setCollectionActive(collection, bool)
+  - addAdmin(address) / removeAdmin(address)
 `);
 }
 

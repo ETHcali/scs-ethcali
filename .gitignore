@@ -19,8 +19,6 @@ coverage.json
 # Ignition deployment files (contains sensitive addresses)
 ignition/deployments/
 
-# Frontend generated files (can be regenerated)
-frontend/
 
 # IDE
 .vscode/
