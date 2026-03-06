@@ -254,8 +254,8 @@ function getDiscountedPrice(uint256 tokenId, address buyer)
 
 **Discount Logic:**
 1. Start with base price from `variants[tokenId].price`
-2. Check all active POAP discounts - add bps if user holds POAP
-3. Check all active holder discounts - add bps (percentage) or fixed amount
+2. Check all active POAP discounts — add bps if address is in `poapWhitelist[tokenId][eventId][buyer]` (admin-managed, no on-chain POAP call)
+3. Check all active holder discounts — add bps (percentage) or fixed amount (ERC-20/ERC-721 balance checked on-chain)
 4. Apply percentage discounts: `finalPrice = basePrice - (basePrice * totalBps / 10000)`
 5. Apply fixed discounts: `finalPrice = finalPrice - fixedTotal`
 6. If discounts >= 100%, return 0 (free)
