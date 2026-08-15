@@ -13,7 +13,19 @@
     "verify:base": "hardhat run scripts/verify-contracts.ts --network base",
     "verify:ethereum": "hardhat run scripts/verify-contracts.ts --network ethereum",
     "verify:unichain": "hardhat run scripts/verify-contracts.ts --network unichain",
-    "verify:optimism": "hardhat run scripts/verify-contracts.ts --network optimism"
+    "verify:optimism": "hardhat run scripts/verify-contracts.ts --network optimism",
+    "deploy:celo": "hardhat run scripts/deploy-all.ts --network celo",
+    "verify:celo": "hardhat run scripts/verify-contracts.ts --network celo",
+    "test:forge": "forge test --match-path 'test/forge/*'",
+    "test:forge:deep": "FOUNDRY_PROFILE=deep forge test --match-path 'test/forge/*'",
+    "test:all": "hardhat test && forge test --match-path 'test/forge/*'",
+    "build:forge": "forge build --skip test",
+    "estimate": "node scripts/estimate-deploy-cost.mjs",
+    "estimate:donations": "node scripts/estimate-deploy-cost.mjs celo donations",
+    "deploy:donations:celo": "hardhat run scripts/deploy-donations.ts --network celo",
+    "deploy:donations:base": "hardhat run scripts/deploy-donations.ts --network base",
+    "seed:swag": "hardhat run scripts/seed-swag.ts",
+    "seed:swag:dry": "DRY_RUN=1 hardhat run scripts/seed-swag.ts"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^3.0.6",

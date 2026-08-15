@@ -1,27 +1,6 @@
 [
   {
-    "inputs": [
-      {
-        "internalType": "string",
-        "name": "baseURI",
-        "type": "string"
-      },
-      {
-        "internalType": "address",
-        "name": "_usdc",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "_treasury",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "initialAdmin",
-        "type": "address"
-      }
-    ],
+    "inputs": [],
     "stateMutability": "nonpayable",
     "type": "constructor"
   },
@@ -221,6 +200,12 @@
       },
       {
         "indexed": false,
+        "internalType": "address",
+        "name": "paymentToken",
+        "type": "address"
+      },
+      {
+        "indexed": false,
         "internalType": "uint256",
         "name": "originalPrice",
         "type": "uint256"
@@ -283,6 +268,50 @@
       }
     ],
     "name": "HolderDiscountRemoved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "name": "PaymentOptionRemoved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "price",
+        "type": "uint256"
+      }
+    ],
+    "name": "PaymentOptionSet",
     "type": "event"
   },
   {
@@ -382,6 +411,12 @@
         "type": "uint256"
       },
       {
+        "indexed": true,
+        "internalType": "address",
+        "name": "paymentToken",
+        "type": "address"
+      },
+      {
         "indexed": false,
         "internalType": "uint256",
         "name": "unitPrice",
@@ -417,6 +452,12 @@
         "internalType": "uint256[]",
         "name": "quantities",
         "type": "uint256[]"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "paymentToken",
+        "type": "address"
       },
       {
         "indexed": false,
@@ -721,19 +762,6 @@
     "inputs": [
       {
         "indexed": true,
-        "internalType": "address",
-        "name": "newUSDC",
-        "type": "address"
-      }
-    ],
-    "name": "USDCUpdated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
         "internalType": "uint256",
         "name": "tokenId",
         "type": "uint256"
@@ -755,12 +783,6 @@
         "indexed": true,
         "internalType": "uint256",
         "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "price",
         "type": "uint256"
       },
       {
@@ -800,6 +822,19 @@
         "internalType": "bytes32",
         "name": "",
         "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "ETH_TOKEN",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
       }
     ],
     "stateMutability": "view",
@@ -987,11 +1022,16 @@
         "internalType": "uint256",
         "name": "quantity",
         "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "paymentToken",
+        "type": "address"
       }
     ],
     "name": "buy",
     "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "payable",
     "type": "function"
   },
   {
@@ -1005,11 +1045,16 @@
         "internalType": "uint256[]",
         "name": "quantities",
         "type": "uint256[]"
+      },
+      {
+        "internalType": "address",
+        "name": "paymentToken",
+        "type": "address"
       }
     ],
     "name": "buyBatch",
     "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "payable",
     "type": "function"
   },
   {
@@ -1035,6 +1080,11 @@
       {
         "internalType": "address",
         "name": "buyer",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "paymentToken",
         "type": "address"
       }
     ],
@@ -1085,6 +1135,30 @@
         "internalType": "struct Swag1155.HolderDiscount[]",
         "name": "",
         "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getPaymentOptions",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "tokens",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "prices",
+        "type": "uint256[]"
       }
     ],
     "stateMutability": "view",
@@ -1230,17 +1304,36 @@
         "internalType": "uint256",
         "name": "tokenId",
         "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "name": "getTokenPrice",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
       }
     ],
     "name": "getVariant",
     "outputs": [
       {
         "components": [
-          {
-            "internalType": "uint256",
-            "name": "price",
-            "type": "uint256"
-          },
           {
             "internalType": "uint256",
             "name": "maxSupply",
@@ -1344,6 +1437,29 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "baseURI",
+        "type": "string"
+      },
+      {
+        "internalType": "address",
+        "name": "_treasury",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "initialAdmin",
+        "type": "address"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -1645,6 +1761,24 @@
         "type": "uint256"
       },
       {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "name": "removePaymentOption",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
         "internalType": "uint256",
         "name": "index",
         "type": "uint256"
@@ -1867,6 +2001,29 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "price",
+        "type": "uint256"
+      }
+    ],
+    "name": "setPaymentOption",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "newTreasury",
         "type": "address"
@@ -1880,26 +2037,8 @@
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "newUSDC",
-        "type": "address"
-      }
-    ],
-    "name": "setUSDC",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
         "internalType": "uint256",
         "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "price",
         "type": "uint256"
       },
       {
@@ -1923,11 +2062,6 @@
       {
         "internalType": "uint256",
         "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "price",
         "type": "uint256"
       },
       {
@@ -2022,13 +2156,24 @@
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "usdc",
-    "outputs": [
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
       {
         "internalType": "address",
         "name": "",
         "type": "address"
+      }
+    ],
+    "name": "variantTokenPrice",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -2044,11 +2189,6 @@
     ],
     "name": "variants",
     "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "price",
-        "type": "uint256"
-      },
       {
         "internalType": "uint256",
         "name": "maxSupply",

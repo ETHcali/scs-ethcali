@@ -1,0 +1,57 @@
+# Foundry runs ALONGSIDE Hardhat in this repo — it does not replace it.
+#
+#   Hardhat  → deployment, verification, and the 268-test integration suite
+#   Foundry  → fuzz and invariant testing of the money-critical contracts
+#
+# Settings below mirror hardhat.config.ts exactly (solc 0.8.28, optimizer runs 1,
+# viaIR, cancun) so both toolchains compile identical bytecode. If you change one,
+# change the other.
+#
+# Output paths are deliberately distinct from Hardhat's `artifacts/` and `cache/`
+# so the two toolchains never fight over the same directory.
+
+[profile.default]
+src = "contracts"
+test = "test/forge"
+out = "forge-out"
+cache_path = "forge-cache"
+libs = ["node_modules", "lib"]
+
+solc_version = "0.8.28"
+optimizer = true
+optimizer_runs = 1
+via_ir = true
+evm_version = "cancun"
+
+# Do not let Foundry try to compile the Hardhat TypeScript tests.
+no_match_path = "test/*.test.ts"
+
+[profile.default.fuzz]
+runs = 512
+
+[profile.default.invariant]
+runs = 256
+depth = 32
+fail_on_revert = false
+
+# Deeper run for pre-deploy verification: `FOUNDRY_PROFILE=deep forge test`
+[profile.deep.fuzz]
+runs = 10000
+
+[profile.deep.invariant]
+runs = 1000
+depth = 64
+
+[rpc_endpoints]
+ethereum = "${ETHEREUM_RPC_URL}"
+base = "${BASE_RPC_URL}"
+optimism = "${OPTIMISM_RPC_URL}"
+unichain = "${UNICHAIN_RPC_URL}"
+celo = "${CELO_RPC_URL}"
+
+[etherscan]
+ethereum = { key = "${ETHERSCAN_API_KEY}" }
+base = { key = "${BASESCAN_API_KEY}", url = "https://api.basescan.org/api" }
+optimism = { key = "${OPTIMISM_API_KEY}", url = "https://api-optimistic.etherscan.io/api" }
+unichain = { key = "${UNICHAIN_API_KEY}", url = "https://api.uniscan.xyz/api" }
+celo = { key = "${CELOSCAN_API_KEY}", url = "https://api.celoscan.io/api" }

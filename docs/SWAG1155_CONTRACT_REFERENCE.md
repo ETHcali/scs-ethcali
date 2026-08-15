@@ -1,9 +1,9 @@
 # Swag1155 Contract Reference
 
-**Complete API reference** for frontend integration with the Swag1155 ERC-1155 smart contract.
+**Complete API reference** for frontend integration with the Swag1155 ERC-1155 smart contract and SwagFactory.
 
-**Contract**: `contracts/Swag1155.sol`
-**Version**: 2.4 (POAP Whitelist + Holder Discounts + Serial Numbers + SwagFactory)
+**Contracts**: `contracts/Swag1155.sol` · `contracts/SwagFactory.sol`
+**Version**: 2.5 (Factory-first deployment model)
 **Last Updated**: March 2026
 
 ---
@@ -11,38 +11,333 @@
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [UI Components Map](#ui-components-map)
-3. [Data Structures](#data-structures)
-4. [Discount System](#discount-system)
-5. [State Variables](#state-variables)
-6. [Admin Functions](#admin-functions)
-7. [User Functions](#user-functions)
-8. [View Functions](#view-functions)
-9. [Events](#events)
-10. [Error Messages](#error-messages)
-11. [Frontend Integration Examples](#frontend-integration-examples)
+2. [SwagFactory Integration](#swagfactory-integration)
+3. [UI Components Map](#ui-components-map)
+4. [Data Structures](#data-structures)
+5. [Discount System](#discount-system)
+6. [State Variables](#state-variables)
+7. [Admin Functions](#admin-functions)
+8. [User Functions](#user-functions)
+9. [View Functions](#view-functions)
+10. [Events](#events)
+11. [Error Messages](#error-messages)
+12. [Frontend Integration Examples](#frontend-integration-examples)
 
 ---
 
 ## Overview
 
-Swag1155 is an ERC-1155 multi-token contract for managing physical merchandise (swag) with:
-- **ERC20 payments** (any token, e.g. USDC 6 decimals)
+### Architecture
+
+Products are deployed and managed through a two-contract system:
+
+| Contract | Role | Address source |
+|----------|------|----------------|
+| `SwagFactory` | Registry + deployer. Creates one `Swag1155` per product. | `frontend/addresses.json` → `SwagFactory` |
+| `Swag1155` | One contract per physical product (e.g. "ETH Cali Hoodie"). TokenIds = sizes. | Returned by `factory.getCollections()` |
+
+**The factory is the single source of truth for product addresses.** Never hardcode a `Swag1155` address — always discover it via the factory.
+
+### Swag1155 features (per product contract)
+
+- **Multi-token payments** — admin configures accepted tokens (USDC, USDT, DAI, WETH, native ETH) and sets an independent price per token per size
+- **Native ETH** — sentinel `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` used as ETH payment token; excess msg.value is refunded
 - **Role-based access** (DEFAULT_ADMIN_ROLE, ADMIN_ROLE)
-- **Per-token metadata** (IPFS URIs)
+- **Per-token metadata** (IPFS URIs per size)
 - **Physical redemption tracking** (3-state flow)
-- **Royalty distribution** (automatic payment splits to artists)
-- **Dynamic discount system** (POAP address whitelist and token holder discounts)
+- **Royalty distribution** (automatic payment splits to artists, works for every payment token)
+- **Dynamic discount system** (POAP address whitelist and token holder discounts, token-agnostic)
 - **Serial numbers** (unique per-unit identifier assigned at mint time)
 
-**Note:** When users purchase swag, payments are automatically split between royalty recipients (e.g., artists) and the treasury. The buyer only needs to approve the total USDC amount. Discounts are automatically applied based on POAP ownership and token holdings, and can stack additively up to 100% off.
+**Note:** When users purchase swag, they choose which payment token to use. Payments are automatically split between royalty recipients and the treasury. For ERC-20 tokens the buyer must approve the contract first; for ETH the buyer sends `msg.value`. Discounts stack additively up to 100% off and apply regardless of which token is used.
 
 ### Role Hierarchy
 
 | Role | Can Do | Granted By |
 |------|--------|------------|
-| `DEFAULT_ADMIN_ROLE` | Add/remove admins, set treasury, set USDC | Contract deployer |
+| `DEFAULT_ADMIN_ROLE` | Add/remove admins, set treasury, set USDC | Contract deployer / factory itemAdmin |
 | `ADMIN_ROLE` | Create products, set variants, mark fulfillment | DEFAULT_ADMIN_ROLE |
+
+---
+
+## SwagFactory Integration
+
+### Mental Model
+
+```
+SwagFactory (one per network)
+  └── ETH Cali Hoodie  → Swag1155 @ 0xAAA...
+        tokenId 1 = Size S  (price, supply, URI)
+        tokenId 2 = Size M
+        tokenId 3 = Size L
+        tokenId 4 = Size XL
+  └── ETH Cali Tee     → Swag1155 @ 0xBBB...
+        tokenId 1 = Size S
+        tokenId 2 = Size M
+        ...
+```
+
+- **One `SwagFactory`** per network — address in `frontend/addresses.json`.
+- **One `Swag1155`** per physical product — discovered via the factory.
+- **TokenIds within a `Swag1155`** represent sizes/variants (1-indexed, in the order passed to `deployCollection`).
+
+### Creating a Product (Admin)
+
+Products are created exclusively via `SwagFactory.deployCollection()`. This atomically:
+1. Deploys a new `Swag1155`
+2. Configures all sizes as tokenIds
+3. Grants `itemAdmin` full control (DEFAULT_ADMIN_ROLE + ADMIN_ROLE)
+4. Renounces factory's own roles on the new contract
+5. Registers the collection in the factory registry
+
+**Script (recommended):**
+```bash
+ITEM_NAME="ETH Cali Hoodie" \
+ITEM_SKU="ETH-CALI-HOODIE-2025" \
+ITEM_ADMIN=0xYourAdminAddress \
+ITEM_SIZES_JSON='[
+  {
+    "metadataURI": "ipfs://QmS.../s.json",
+    "maxSupply": 50,
+    "active": true,
+    "payments": [
+      { "token": "0xUSDC...", "price": 25000000 },
+      { "token": "0xUSDT...", "price": 25000000 },
+      { "token": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", "price": "10000000000000000" }
+    ]
+  },
+  {
+    "metadataURI": "ipfs://QmM.../m.json",
+    "maxSupply": 100,
+    "active": true,
+    "payments": [
+      { "token": "0xUSDC...", "price": 25000000 },
+      { "token": "0xUSDT...", "price": 25000000 },
+      { "token": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", "price": "10000000000000000" }
+    ]
+  }
+]' \
+npx hardhat run scripts/deploy-collection.ts --network base
+```
+
+**Direct contract call:**
+```solidity
+function deployCollection(
+    string        calldata name,      // "ETH Cali Hoodie"
+    string        calldata sku,       // "ETH-CALI-HOODIE-2025"
+    address                treasury,  // Where sales go
+    address                itemAdmin, // Who owns the new Swag1155
+    VariantInit[] calldata sizes      // One entry per size; tokenId = index + 1
+) external onlyRole(ADMIN_ROLE) returns (address swagAddr)
+```
+
+**`VariantInit` and `PaymentOption` structs:**
+```solidity
+struct PaymentOption {
+    address token; // ERC-20 address, or ETH_TOKEN (0xEeee...EEeE) for native ETH
+    uint256 price; // Price in that token's base units (25 USDC = 25_000_000)
+}
+
+struct VariantInit {
+    string          metadataURI; // "ipfs://Qm.../s.json"
+    uint256         maxSupply;   // Max inventory for this size
+    bool            active;      // Open for purchase at launch?
+    PaymentOption[] payments;    // One entry per accepted token + price
+}
+```
+
+**Frontend (admin form):**
+```typescript
+import SwagFactoryABI from './abis/SwagFactory.json';
+
+const ETH_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+
+const tx = await writeContract({
+  address: SWAG_FACTORY_ADDRESS,
+  abi: SwagFactoryABI,
+  functionName: 'deployCollection',
+  args: [
+    'ETH Cali Hoodie',
+    'ETH-CALI-HOODIE-2025',
+    TREASURY_ADDRESS,
+    ITEM_ADMIN_ADDRESS,
+    [
+      {
+        metadataURI: 'ipfs://QmS.../s.json',
+        maxSupply: 50n,
+        active: true,
+        payments: [
+          { token: USDC_ADDRESS, price: 25000000n },      // 25 USDC
+          { token: USDT_ADDRESS, price: 25000000n },      // 25 USDT
+          { token: ETH_TOKEN,    price: 10000000000000000n }, // 0.01 ETH
+        ],
+      },
+      {
+        metadataURI: 'ipfs://QmM.../m.json',
+        maxSupply: 100n,
+        active: true,
+        payments: [
+          { token: USDC_ADDRESS, price: 25000000n },
+          { token: ETH_TOKEN,    price: 10000000000000000n },
+        ],
+      },
+    ],
+  ],
+});
+// After tx confirms, call getCollections() to get the new contract address
+```
+
+**Emits:**
+```solidity
+event CollectionDeployed(
+    address indexed collection,  // new Swag1155 clone address
+    string  name,
+    string  sku,
+    address treasury,
+    uint256 variantCount,
+    address indexed creator
+);
+```
+
+### Discovering Products (Frontend)
+
+The factory is the source of truth. Call it on page load to build the product list.
+
+```typescript
+import SwagFactoryABI from './abis/SwagFactory.json';
+import Swag1155ABI from './abis/Swag1155.json';
+
+// 1. Get all active product addresses
+const activeCollections = await readContract({
+  address: SWAG_FACTORY_ADDRESS,
+  abi: SwagFactoryABI,
+  functionName: 'getActiveCollections',
+});
+// → ['0xAAA...', '0xBBB...', ...]
+
+// 2. For each collection, load metadata and sizes
+for (const collectionAddr of activeCollections) {
+  // Factory metadata (name, SKU, etc.)
+  const meta = await readContract({
+    address: SWAG_FACTORY_ADDRESS,
+    abi: SwagFactoryABI,
+    functionName: 'getCollectionMeta',
+    args: [collectionAddr],
+  });
+  // meta = { name: 'ETH Cali Hoodie', sku: '...', variantCount: 3n, active: true, ... }
+
+  // Token IDs (sizes) within this product's Swag1155
+  const tokenIds = await readContract({
+    address: collectionAddr,
+    abi: Swag1155ABI,
+    functionName: 'listTokenIds',
+  });
+  // tokenIds = [1n, 2n, 3n]  (S, M, L in order of deployment)
+
+  // Variant details per size
+  for (const tokenId of tokenIds) {
+    const variant = await readContract({
+      address: collectionAddr,
+      abi: Swag1155ABI,
+      functionName: 'getVariant',
+      args: [tokenId],
+    });
+    const metadataUri = await readContract({
+      address: collectionAddr,
+      abi: Swag1155ABI,
+      functionName: 'uri',
+      args: [tokenId],
+    });
+    // Build product card: name from meta, price/supply from variant, image from IPFS
+  }
+}
+```
+
+### Factory View Functions
+
+```solidity
+// All deployed collections (including inactive)
+function getCollections() external view returns (address[] memory)
+
+// Only factory-active collections
+function getActiveCollections() external view returns (address[] memory)
+
+// Registry metadata for one collection
+function getCollectionMeta(address collection) external view returns (CollectionMeta memory)
+
+// Total number of deployed collections
+function getCollectionCount() external view returns (uint256)
+
+// Check if an address is a factory-registered collection
+function isCollection(address) external view returns (bool)
+```
+
+**`CollectionMeta` struct:**
+```typescript
+interface CollectionMeta {
+  name: string;        // "ETH Cali Hoodie"
+  sku: string;         // "ETH-CALI-HOODIE-2025"
+  treasury: string;    // Sale proceeds recipient
+  creator: string;     // Who called deployCollection
+  deployedAt: bigint;  // block.timestamp
+  variantCount: bigint; // Number of sizes (tokenIds)
+  active: boolean;     // Factory-level visibility toggle
+}
+```
+
+> Payment tokens are stored per-tokenId on each `Swag1155` clone. Call `getPaymentOptions(tokenId)` on the product contract to enumerate accepted tokens and prices.
+
+### Toggling Product Visibility (Admin)
+
+```solidity
+function setCollectionActive(address collection, bool active) external onlyRole(ADMIN_ROLE)
+```
+
+This is a **factory-level visibility toggle only** — it does not affect the underlying `Swag1155` sale state. Use it to show/hide products in the storefront without modifying the deployed contract.
+
+```typescript
+// Hide a product from the storefront
+await writeContract({
+  address: SWAG_FACTORY_ADDRESS,
+  abi: SwagFactoryABI,
+  functionName: 'setCollectionActive',
+  args: [collectionAddress, false],
+});
+```
+
+**Emits:** `CollectionStatusChanged(address indexed collection, bool active)`
+
+### Post-Deployment Product Configuration
+
+After `deployCollection`, the `itemAdmin` configures the resulting `Swag1155` directly:
+
+```typescript
+const collectionAddr = '0xAAA...'; // returned by factory
+
+// Add royalty for artist
+await writeContract({ address: collectionAddr, abi: Swag1155ABI,
+  functionName: 'addRoyalty', args: [1n, artistAddress, 500n] }); // 5%
+
+// Add POAP discount for size M (tokenId 2)
+await writeContract({ address: collectionAddr, abi: Swag1155ABI,
+  functionName: 'addPoapDiscount', args: [2n, 123456n, 1000n] }); // 10% off
+
+// Whitelist attendees for POAP discount
+await writeContract({ address: collectionAddr, abi: Swag1155ABI,
+  functionName: 'addPoapWhitelist', args: [2n, 123456n, ['0xUser1...', '0xUser2...']] });
+```
+
+### Factory Admin Management
+
+```solidity
+// Grant factory ADMIN_ROLE (can call deployCollection, setCollectionActive)
+function addAdmin(address admin) external onlyRole(DEFAULT_ADMIN_ROLE)
+
+// Revoke factory ADMIN_ROLE
+function removeAdmin(address admin) external onlyRole(DEFAULT_ADMIN_ROLE)
+```
+
+Note: factory admins only control the factory. Each deployed `Swag1155` has its own independent `itemAdmin`.
 
 ---
 
@@ -165,31 +460,36 @@ Swag1155 is an ERC-1155 multi-token contract for managing physical merchandise (
 
 ### Variant
 
-Stores product variant information (price, supply, status).
+Stores inventory and active status per tokenId. Prices live in the payment options mapping, not here.
 
 ```solidity
 struct Variant {
-    uint256 price;      // USDC price in base units (6 decimals)
-    uint256 maxSupply;  // Maximum available stock
-    uint256 minted;     // Already sold/minted count
-    bool active;        // Whether variant is available for purchase
+    uint256 maxSupply; // Maximum available stock
+    uint256 minted;    // Already sold/minted count
+    bool    active;    // Whether variant is available for purchase
 }
 ```
 
 **Frontend usage:**
 ```typescript
 interface Variant {
-  price: bigint;      // e.g., 25000000n = 25 USDC
-  maxSupply: bigint;  // e.g., 100n
-  minted: bigint;     // e.g., 45n
-  active: boolean;    // e.g., true
+  maxSupply: bigint; // e.g., 100n
+  minted: bigint;    // e.g., 45n
+  active: boolean;   // e.g., true
 }
 
 // Calculate available stock
 const available = Number(variant.maxSupply - variant.minted);
 
-// Convert price to display
-const priceUSD = Number(variant.price) / 1e6; // 25.00
+// Get price for a specific payment token
+const [tokens, prices] = await readContract({
+  address: collectionAddr,
+  abi: Swag1155ABI,
+  functionName: 'getPaymentOptions',
+  args: [tokenId],
+});
+// tokens = ['0xUSDC...', '0xEeee...EEeE']
+// prices = [25000000n, 10000000000000000n]
 ```
 
 ---
@@ -254,25 +554,31 @@ const royaltyAmount = (price * royalty.percentage) / 10000n;
 
 Swag1155 supports a flexible discount system that allows admins to configure per-product discounts based on POAP ownership or token holdings. Discounts are automatically applied during purchase and can stack additively.
 
-### Constructor
+### Deployment Model (Clones)
 
-The contract constructor takes 4 parameters (POAP_CONTRACT was removed — POAP eligibility is now managed via the `poapWhitelist` mapping):
+`Swag1155` uses the **EIP-1167 minimal clone** pattern. A single reference implementation is deployed once; `SwagFactory` creates cheap proxy clones for each product and calls `initialize()` on each clone.
+
+You never call these directly — `SwagFactory.deployCollection()` handles everything atomically.
 
 ```solidity
-constructor(
+// Reference implementation constructor — locks itself against initialization
+constructor() ERC1155("") { /* _initialized = true */ }
+
+// Called by SwagFactory on each clone immediately after Clones.clone()
+function initialize(
     string memory baseURI,
-    address _usdc,
     address _treasury,
     address initialAdmin
-)
+) external
 ```
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|--------|
 | `baseURI` | `string` | Base URI for token metadata | `"ipfs://"` |
-| `_usdc` | `address` | USDC token contract address | `0xUSDC...` |
 | `_treasury` | `address` | Treasury wallet address | `0xTreasury...` |
-| `initialAdmin` | `address` | Admin with DEFAULT_ADMIN_ROLE + ADMIN_ROLE | `0xAdmin...` |
+| `initialAdmin` | `address` | Admin with DEFAULT_ADMIN_ROLE + ADMIN_ROLE | `0xFactory...` |
+
+> **SwagFactory constructor:** `constructor(address admin, address implementation)` — takes both the factory admin and the address of the deployed Swag1155 reference implementation. `deploy-all.ts` handles this deployment order automatically.
 
 ---
 
@@ -519,13 +825,14 @@ function addHolderDiscount(
 | `tokenId` | `uint256` | Product token ID | `1001` |
 | `token` | `address` | Token contract address | `0xToken...` |
 | `discountType` | `DiscountType` | Percentage (0) or Fixed (1) | `0` (Percentage) |
-| `value` | `uint256` | Discount value (bps for Percentage, USDC for Fixed) | `500` (5% off) or `5000000` ($5 off) |
+| `value` | `uint256` | Discount value — bps for Percentage; payment token base units for Fixed | `500` (5% off) or `5000000` ($5 in USDC) |
 
 **DiscountType enum:**
 ```solidity
 enum DiscountType {
-    Percentage, // 0 - Discount in basis points
-    Fixed       // 1 - Fixed amount in USDC (6 decimals)
+    Percentage, // 0 - Discount in basis points (500 = 5%)
+    Fixed       // 1 - Fixed amount in the payment token's base units
+                //     e.g. 5_000_000 for $5 USDC, or 5_000_000_000_000_000 for 0.005 ETH
 }
 ```
 
@@ -648,73 +955,73 @@ The discount system automatically calculates the final price based on all qualif
 
 #### getDiscountedPrice
 
-Calculate the final price after applying all qualifying discounts for a buyer.
+Calculate the final price after applying all qualifying discounts for a buyer, denominated in the chosen payment token.
 
 ```solidity
 function getDiscountedPrice(
     uint256 tokenId,
-    address buyer
-) public view returns (uint256)
+    address buyer,
+    address paymentToken
+) public view returns (uint256 finalPrice)
 ```
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `tokenId` | `uint256` | Product token ID | `1001` |
+| `tokenId` | `uint256` | Variant token ID | `1` |
 | `buyer` | `address` | Buyer address to check discounts | `0xBuyer...` |
+| `paymentToken` | `address` | Token to pay with (or ETH_TOKEN) | `0xUSDC...` |
 
-**Returns:** `uint256` - Final price in USDC base units (6 decimals)
+**Returns:** `uint256` - Final price in `paymentToken`'s base units. Returns `0` if the token is not accepted for this variant.
 
 **Discount Stacking Rules:**
 - All qualifying discounts are **additive** (they add together)
 - POAP discounts: Buyer receives discount if their address is in `poapWhitelist[tokenId][eventId]` (admin-managed)
 - Holder discounts: Buyer receives discount if they hold the specified ERC-20 or ERC-721 token (checked on-chain)
-- Percentage discounts: Applied as basis points (500 bps = 5%)
-- Fixed discounts: Subtracted as USDC amount (6 decimals)
+- Percentage discounts: Applied as basis points (500 bps = 5%) — work identically for any payment token
+- Fixed discounts: Subtracted in payment token base units — set them appropriately per token's decimals
 - If total discounts >= 100%, final price is 0 (free)
 - Discounts cannot result in negative prices (capped at 0)
 
 **Example Calculation:**
 ```
-Original Price: $25 (25000000 in base units)
+Payment token: USDC (6 decimals)
+Base Price: $25 (25_000_000 in USDC base units)
 
 Qualifying Discounts:
 - POAP event 123456: 5% off (500 bps)
-- POAP event 789012: 10% off (1000 bps)
 - NFT holder: 10% off (1000 bps)
-- ERC20 holder: $5 fixed (5000000 base units)
+- ERC20 holder: $5 fixed (5_000_000 USDC base units)
 
 Total:
-- Percentage discounts: 5% + 10% + 10% = 25% (2500 bps)
+- Percentage discounts: 5% + 10% = 15% (1500 bps)
 - Fixed discounts: $5
-- Price after percentage: $25 * 0.75 = $18.75
-- Price after fixed: $18.75 - $5 = $13.75
+- Price after percentage: $25 × 0.85 = $21.25
+- Price after fixed: $21.25 − $5 = $16.25
 
-Final Price: $13.75 (13750000 in base units)
+Final Price: $16.25 (16_250_000 in USDC base units)
 ```
 
 **Frontend:**
 ```typescript
-const { data: finalPrice } = useReadContract({
+const ETH_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+
+// For USDC payment
+const { data: finalPriceUSDC } = useReadContract({
   address: swag1155,
   abi: Swag1155ABI,
   functionName: 'getDiscountedPrice',
-  args: [1001n, buyerAddress],
+  args: [1n, buyerAddress, USDC_ADDRESS],
 });
+const priceUSD = Number(finalPriceUSDC) / 1e6; // 16.25
 
-// Display price
-const priceUSD = Number(finalPrice) / 1e6; // 13.75
-
-// Calculate savings
-const { data: variant } = useReadContract({
+// For ETH payment
+const { data: finalPriceETH } = useReadContract({
   address: swag1155,
   abi: Swag1155ABI,
-  functionName: 'getVariant',
-  args: [1001n],
+  functionName: 'getDiscountedPrice',
+  args: [1n, buyerAddress, ETH_TOKEN],
 });
-
-const originalPrice = Number(variant.price) / 1e6; // 25.00
-const savings = originalPrice - priceUSD; // 11.25
-const savingsPercent = (savings / originalPrice) * 100; // 45%
+const priceETH = Number(finalPriceETH) / 1e18; // e.g., 0.0085
 ```
 
 ---
@@ -724,40 +1031,35 @@ const savingsPercent = (savings / originalPrice) * 100; // 45%
 The `buy()` and `buyBatch()` functions automatically use `getDiscountedPrice()` to calculate the final price. No additional frontend changes are needed.
 
 **Important:**
-- If the total discounted price is 0 (100% discount), **no USDC transfer occurs**
+- If the total discounted price is 0 (100% discount), **no token transfer occurs**
 - The buyer still receives the NFT tokens
 - The `DiscountApplied` event is emitted with price details
 
-**Frontend Integration:**
+**Frontend Integration (USDC example):**
 ```typescript
-// Purchase with automatic discount
-const handlePurchase = async () => {
-  // Get discounted price
+const handlePurchase = async (paymentToken: string) => {
   const finalPrice = await readContract({
     address: swag1155,
     abi: Swag1155ABI,
     functionName: 'getDiscountedPrice',
-    args: [tokenId, buyerAddress],
+    args: [tokenId, buyerAddress, paymentToken],
   });
 
   const totalPrice = finalPrice * quantity;
+  const isETH = paymentToken === ETH_TOKEN;
 
-  // Approve USDC (only if price > 0)
-  if (totalPrice > 0n) {
-    await writeContract({
-      address: usdcAddress,
-      abi: ERC20ABI,
-      functionName: 'approve',
-      args: [swag1155, totalPrice],
-    });
+  if (!isETH && totalPrice > 0n) {
+    // Approve ERC-20 spend
+    await writeContract({ address: paymentToken, abi: ERC20ABI,
+      functionName: 'approve', args: [swag1155, totalPrice] });
   }
 
-  // Buy (discounts applied automatically)
   await writeContract({
     address: swag1155,
     abi: Swag1155ABI,
     functionName: 'buy',
-    args: [tokenId, quantity],
+    args: [tokenId, quantity, paymentToken],
+    value: isETH ? totalPrice : 0n, // send ETH if native payment
   });
 };
 ```
@@ -770,9 +1072,9 @@ const handlePurchase = async () => {
 
 | Variable | Type | Description | Frontend Read |
 |----------|------|-------------|---------------|
-| `usdc` | `address` | Payment token contract address (any ERC20) | `useReadContract({ functionName: 'usdc' })` |
 | `treasury` | `address` | Address receiving payments | `useReadContract({ functionName: 'treasury' })` |
-| `variants` | `mapping(uint256 => Variant)` | Product variant data by tokenId | `useReadContract({ functionName: 'variants', args: [tokenId] })` |
+| `variants` | `mapping(uint256 => Variant)` | Inventory data by tokenId | `useReadContract({ functionName: 'variants', args: [tokenId] })` |
+| `variantTokenPrice` | `mapping(uint256 => mapping(address => uint256))` | Price per tokenId per payment token | `useReadContract({ functionName: 'variantTokenPrice', args: [tokenId, tokenAddr] })` |
 | `redemptions` | `mapping(uint256 => mapping(address => RedemptionStatus))` | Redemption status by tokenId and owner | `useReadContract({ functionName: 'redemptions', args: [tokenId, owner] })` |
 | `royaltyRecipients` | `mapping(uint256 => RoyaltyInfo[])` | Array of royalty recipients per tokenId | `useReadContract({ functionName: 'royaltyRecipients', args: [tokenId, index] })` |
 | `totalRoyaltyBps` | `mapping(uint256 => uint256)` | Total royalty basis points per tokenId | `useReadContract({ functionName: 'totalRoyaltyBps', args: [tokenId] })` |
@@ -784,6 +1086,7 @@ const handlePurchase = async () => {
 
 | Constant | Value | Description |
 |----------|-------|-------------|
+| `ETH_TOKEN` | `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` | Sentinel address representing native ETH as payment |
 | `ROYALTY_DENOMINATOR` | `10000` | Basis points denominator (100% = 10000 bps) |
 
 ### Role Constants
@@ -848,7 +1151,7 @@ function removeAdmin(address admin) external onlyRole(DEFAULT_ADMIN_ROLE)
 
 ### setTreasury
 
-Updates the treasury address receiving USDC payments.
+Updates the treasury address receiving payments.
 
 ```solidity
 function setTreasury(address newTreasury) external onlyRole(DEFAULT_ADMIN_ROLE)
@@ -866,34 +1169,74 @@ function setTreasury(address newTreasury) external onlyRole(DEFAULT_ADMIN_ROLE)
 
 ---
 
-### setUSDC
+### setPaymentOption
 
-Updates the USDC token contract address.
+Set or update the price for a specific payment token on a variant. Can be called multiple times to add USDC, USDT, ETH, etc.
 
 ```solidity
-function setUSDC(address newUSDC) external onlyRole(DEFAULT_ADMIN_ROLE)
+function setPaymentOption(
+    uint256 tokenId,
+    address token,
+    uint256 price
+) external onlyRole(ADMIN_ROLE)
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `newUSDC` | `address` | New USDC token contract address |
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `tokenId` | `uint256` | Variant token ID | `1` |
+| `token` | `address` | ERC-20 address or `ETH_TOKEN` (0xEeee...EEeE) | `0xUSDC...` |
+| `price` | `uint256` | Price in that token's base units | `25000000` (25 USDC) |
 
 **Requirements:**
-- Caller must have `DEFAULT_ADMIN_ROLE`
-- `newUSDC` cannot be zero address
+- Caller must have `ADMIN_ROLE`
+- `token` cannot be zero address
+- `price` must be > 0
 
-**Emits:** `USDCUpdated(address indexed newUSDC)`
+**Emits:** `PaymentOptionSet(uint256 indexed tokenId, address indexed token, uint256 price)`
+
+**Frontend:**
+```typescript
+const ETH_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+
+// Add USDC at $25
+await writeContract({ address: swag1155, abi: Swag1155ABI,
+  functionName: 'setPaymentOption', args: [1n, USDC_ADDRESS, 25000000n] });
+
+// Add native ETH at 0.01 ETH
+await writeContract({ address: swag1155, abi: Swag1155ABI,
+  functionName: 'setPaymentOption', args: [1n, ETH_TOKEN, 10000000000000000n] });
+```
+
+---
+
+### removePaymentOption
+
+Remove a payment token from a variant so it can no longer be used to purchase.
+
+```solidity
+function removePaymentOption(uint256 tokenId, address token) external onlyRole(ADMIN_ROLE)
+```
+
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `tokenId` | `uint256` | Variant token ID | `1` |
+| `token` | `address` | Token to remove | `0xDAI...` |
+
+**Requirements:**
+- Caller must have `ADMIN_ROLE`
+- `token` must already be a payment option for this variant
+
+**Emits:** `PaymentOptionRemoved(uint256 indexed tokenId, address indexed token)`
 
 ---
 
 ### setVariant
 
-Creates or updates a product variant.
+Creates or updates a product variant's supply and active status. Use `setPaymentOption` separately to configure accepted tokens and prices.
 
 ```solidity
 function setVariant(
     uint256 tokenId,
-    uint256 price,
     uint256 maxSupply,
     bool active
 ) external onlyRole(ADMIN_ROLE)
@@ -901,8 +1244,7 @@ function setVariant(
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `tokenId` | `uint256` | Unique identifier for this variant | `1001` (product 100, size S) |
-| `price` | `uint256` | Price in USDC base units (6 decimals) | `25000000` = 25 USDC |
+| `tokenId` | `uint256` | Unique identifier for this variant | `1` |
 | `maxSupply` | `uint256` | Maximum available stock | `50` |
 | `active` | `bool` | Whether available for purchase | `true` |
 
@@ -910,37 +1252,20 @@ function setVariant(
 - Caller must have `ADMIN_ROLE`
 - `maxSupply` must be >= current `minted` count
 
-**Emits:** `VariantUpdated(uint256 indexed tokenId, uint256 price, uint256 maxSupply, bool active)`
+**Emits:** `VariantUpdated(uint256 indexed tokenId, uint256 maxSupply, bool active)`
 
 **Frontend:**
 ```typescript
-// Create a new variant
+// Toggle active state
 await writeContract({
-  address: swag1155,
-  abi: Swag1155ABI,
-  functionName: 'setVariant',
-  args: [
-    1001n,              // tokenId
-    25000000n,          // price (25 USDC)
-    50n,                // maxSupply
-    true,               // active
-  ],
-});
-
-// Deactivate a variant
-await writeContract({
-  address: swag1155,
-  abi: Swag1155ABI,
-  functionName: 'setVariant',
-  args: [1001n, 25000000n, 50n, false], // active = false
+  address: swag1155, abi: Swag1155ABI,
+  functionName: 'setVariant', args: [1n, 50n, false], // pause sales
 });
 
 // Increase supply
 await writeContract({
-  address: swag1155,
-  abi: Swag1155ABI,
-  functionName: 'setVariant',
-  args: [1001n, 25000000n, 100n, true], // maxSupply increased to 100
+  address: swag1155, abi: Swag1155ABI,
+  functionName: 'setVariant', args: [1n, 100n, true], // restock
 });
 ```
 
@@ -948,22 +1273,20 @@ await writeContract({
 
 ### setVariantWithURI
 
-Creates or updates a variant with a per-token metadata URI.
+Creates or updates a variant with a per-token metadata URI. Prices are set separately via `setPaymentOption`.
 
 ```solidity
 function setVariantWithURI(
     uint256 tokenId,
-    uint256 price,
     uint256 maxSupply,
-    bool active,
+    bool    active,
     string memory tokenURI
 ) external onlyRole(ADMIN_ROLE)
 ```
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `tokenId` | `uint256` | Unique identifier for this variant | `1001` |
-| `price` | `uint256` | Price in USDC base units | `25000000` |
+| `tokenId` | `uint256` | Unique identifier for this variant | `1` |
 | `maxSupply` | `uint256` | Maximum available stock | `50` |
 | `active` | `bool` | Whether available for purchase | `true` |
 | `tokenURI` | `string` | IPFS URI for token metadata | `ipfs://QmXyz.../metadata.json` |
@@ -974,25 +1297,15 @@ function setVariantWithURI(
 - `tokenURI` cannot be empty
 
 **Emits:**
-- `VariantUpdated(uint256 indexed tokenId, uint256 price, uint256 maxSupply, bool active)`
+- `VariantUpdated(uint256 indexed tokenId, uint256 maxSupply, bool active)`
 - `VariantURISet(uint256 indexed tokenId, string uri)`
 
 **Frontend:**
 ```typescript
-// Create variant with IPFS metadata
-const metadataUri = 'ipfs://QmXyz123.../metadata.json';
-
 await writeContract({
-  address: swag1155,
-  abi: Swag1155ABI,
+  address: swag1155, abi: Swag1155ABI,
   functionName: 'setVariantWithURI',
-  args: [
-    1001n,              // tokenId
-    25000000n,          // price
-    50n,                // maxSupply
-    true,               // active
-    metadataUri,        // tokenURI
-  ],
+  args: [1n, 50n, true, 'ipfs://QmXyz123.../metadata.json'],
 });
 ```
 
@@ -1177,60 +1490,67 @@ await writeContract({
 
 ### buy
 
-Purchase a single variant with USDC. Payment is automatically split: royalties are sent to recipients, and the remainder goes to the treasury. Discounts are automatically applied via `getDiscountedPrice()`.
+Purchase a single variant. Buyer chooses the payment token. Discounts are applied automatically. Payment is split between royalty recipients and treasury.
 
 ```solidity
-function buy(uint256 tokenId, uint256 quantity) external nonReentrant
+function buy(
+    uint256 tokenId,
+    uint256 quantity,
+    address paymentToken
+) external payable nonReentrant
 ```
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `tokenId` | `uint256` | Variant to purchase | `1001` |
+| `tokenId` | `uint256` | Variant to purchase | `1` |
 | `quantity` | `uint256` | Number of units to buy | `2` |
+| `paymentToken` | `address` | Token to pay with (ERC-20 address or `ETH_TOKEN`) | `0xUSDC...` |
 
 **Requirements:**
 - `quantity` must be > 0
 - Variant must be `active`
 - Sufficient supply: `minted + quantity <= maxSupply`
-- User must have approved USDC: `discountedPrice * quantity`
+- Token must be a configured payment option for this variant
+- **ERC-20:** `msg.value == 0`, buyer must have approved `discountedPrice × quantity`
+- **ETH:** `msg.value >= discountedPrice × quantity`; excess is refunded
 
 **Emits:**
-- `Purchased(address indexed buyer, uint256 indexed tokenId, uint256 quantity, uint256 unitPrice, uint256 totalPrice)`
-- `DiscountApplied(address indexed buyer, uint256 indexed tokenId, uint256 originalPrice, uint256 finalPrice)` (if discounts applied)
+- `Purchased(address indexed buyer, uint256 indexed tokenId, uint256 quantity, address indexed paymentToken, uint256 unitPrice, uint256 totalPrice)`
+- `DiscountApplied(address indexed buyer, uint256 indexed tokenId, address paymentToken, uint256 originalPrice, uint256 finalPrice)` (if discounts applied)
+- `SerialMinted(address indexed buyer, uint256 indexed tokenId, uint256 indexed serial)` (once per unit)
 
-**Note:**
-- Payment distribution happens automatically within the contract. If the token has royalty recipients configured, they receive their percentage first, and the treasury receives the remainder.
-- Discounts are automatically applied based on buyer's POAP ownership and token holdings. Use `getDiscountedPrice()` to calculate the actual price.
-- If the total discounted price is 0 (100% discount), no USDC transfer occurs, but the buyer still receives the NFT.
-
-**Frontend:**
+**Frontend — ERC-20:**
 ```typescript
-// Step 1: Get discounted price
 const discountedPrice = await readContract({
-  address: swag1155,
-  abi: Swag1155ABI,
-  functionName: 'getDiscountedPrice',
-  args: [tokenId, buyerAddress],
+  address: swag1155, abi: Swag1155ABI,
+  functionName: 'getDiscountedPrice', args: [tokenId, buyerAddress, USDC_ADDRESS],
 });
+const total = discountedPrice * quantity;
 
-const totalPrice = discountedPrice * quantity;
-
-// Step 2: Approve USDC (only if price > 0)
-if (totalPrice > 0n) {
-  await writeContract({
-    address: usdcAddress,
-    abi: ERC20ABI,
-    functionName: 'approve',
-    args: [swag1155, totalPrice],
-  });
+if (total > 0n) {
+  await writeContract({ address: USDC_ADDRESS, abi: ERC20ABI,
+    functionName: 'approve', args: [swag1155, total] });
 }
 
-// Step 3: Buy (discounts applied automatically)
 await writeContract({
-  address: swag1155,
-  abi: Swag1155ABI,
-  functionName: 'buy',
-  args: [1001n, 2n], // tokenId, quantity
+  address: swag1155, abi: Swag1155ABI,
+  functionName: 'buy', args: [tokenId, quantity, USDC_ADDRESS],
+});
+```
+
+**Frontend — Native ETH:**
+```typescript
+const ETH_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+const discountedPrice = await readContract({
+  address: swag1155, abi: Swag1155ABI,
+  functionName: 'getDiscountedPrice', args: [tokenId, buyerAddress, ETH_TOKEN],
+});
+const total = discountedPrice * quantity;
+
+await writeContract({
+  address: swag1155, abi: Swag1155ABI,
+  functionName: 'buy', args: [tokenId, quantity, ETH_TOKEN],
+  value: total, // send ETH; excess is refunded by the contract
 });
 ```
 
@@ -1238,67 +1558,55 @@ await writeContract({
 
 ### buyBatch
 
-Purchase multiple variants in a single transaction. Discounts are automatically applied via `getDiscountedPrice()` for each variant.
+Purchase multiple variants in a single transaction using one payment token. All items must share the same payment token.
 
 ```solidity
 function buyBatch(
     uint256[] calldata tokenIds,
-    uint256[] calldata quantities
-) external nonReentrant
+    uint256[] calldata quantities,
+    address paymentToken
+) external payable nonReentrant
 ```
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `tokenIds` | `uint256[]` | Array of variant IDs | `[1001, 1002, 1003]` |
+| `tokenIds` | `uint256[]` | Array of variant IDs | `[1, 2, 3]` |
 | `quantities` | `uint256[]` | Array of quantities per variant | `[1, 2, 1]` |
+| `paymentToken` | `address` | Token to pay with (same for all items) | `0xUSDC...` |
 
 **Requirements:**
-- Arrays must have same length
-- Arrays cannot be empty
-- Each quantity must be > 0
-- Each variant must be `active`
-- Sufficient supply for each variant
-- User must have approved total discounted USDC
+- Arrays must have same length and not be empty
+- Each quantity > 0, each variant must be `active` with sufficient supply
+- Token must be accepted for every variant in the batch
+- **ERC-20:** `msg.value == 0`, buyer must have approved the grand total
+- **ETH:** `msg.value >= grandTotal`; excess is refunded
 
 **Emits:**
-- `PurchasedBatch(address indexed buyer, uint256[] tokenIds, uint256[] quantities, uint256 totalPrice)`
-- `DiscountApplied(address indexed buyer, uint256 indexed tokenId, uint256 originalPrice, uint256 finalPrice)` (for each discounted item)
-
-**Note:** If the total discounted price is 0 (100% discount on all items), no USDC transfer occurs.
+- `PurchasedBatch(address indexed buyer, uint256[] tokenIds, uint256[] quantities, address indexed paymentToken, uint256 totalPrice)`
 
 **Frontend:**
 ```typescript
-// Calculate total discounted price
-const tokenIds = [1001n, 1002n, 1003n];
+const tokenIds  = [1n, 2n, 3n];
 const quantities = [1n, 2n, 1n];
-let totalPrice = 0n;
+let grandTotal = 0n;
 
 for (let i = 0; i < tokenIds.length; i++) {
-  const discountedPrice = await readContract({
-    address: swag1155,
-    abi: Swag1155ABI,
+  const price = await readContract({
+    address: swag1155, abi: Swag1155ABI,
     functionName: 'getDiscountedPrice',
-    args: [tokenIds[i], buyerAddress],
+    args: [tokenIds[i], buyerAddress, USDC_ADDRESS],
   });
-  totalPrice += discountedPrice * quantities[i];
+  grandTotal += price * quantities[i];
 }
 
-// Approve total (only if price > 0)
-if (totalPrice > 0n) {
-  await writeContract({
-    address: usdcAddress,
-    abi: ERC20ABI,
-    functionName: 'approve',
-    args: [swag1155, totalPrice],
-  });
+if (grandTotal > 0n) {
+  await writeContract({ address: USDC_ADDRESS, abi: ERC20ABI,
+    functionName: 'approve', args: [swag1155, grandTotal] });
 }
 
-// Buy batch (discounts applied automatically)
 await writeContract({
-  address: swag1155,
-  abi: Swag1155ABI,
-  functionName: 'buyBatch',
-  args: [tokenIds, quantities],
+  address: swag1155, abi: Swag1155ABI,
+  functionName: 'buyBatch', args: [tokenIds, quantities, USDC_ADDRESS],
 });
 ```
 
@@ -1339,6 +1647,52 @@ await writeContract({
 ---
 
 ## View Functions
+
+### getPaymentOptions
+
+Get all accepted payment tokens and their prices for a variant.
+
+```solidity
+function getPaymentOptions(uint256 tokenId)
+    external view
+    returns (address[] memory tokens, uint256[] memory prices)
+```
+
+**Returns:**
+- `tokens` — array of accepted token addresses (`ETH_TOKEN` for native ETH)
+- `prices` — corresponding prices in each token's base units
+
+**Frontend:**
+```typescript
+const ETH_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+
+const [tokens, prices] = await readContract({
+  address: collectionAddr, abi: Swag1155ABI,
+  functionName: 'getPaymentOptions', args: [1n],
+});
+
+// Build a payment selector for the UI
+const paymentOptions = tokens.map((token, i) => ({
+  token,
+  price: prices[i],
+  isETH: token.toLowerCase() === ETH_TOKEN.toLowerCase(),
+  label: token.toLowerCase() === ETH_TOKEN.toLowerCase()
+    ? `${Number(prices[i]) / 1e18} ETH`
+    : `${Number(prices[i]) / 1e6} USDC`,
+}));
+```
+
+---
+
+### getTokenPrice
+
+Get the price for one specific payment token on a variant. Returns `0` if the token is not accepted.
+
+```solidity
+function getTokenPrice(uint256 tokenId, address token) external view returns (uint256)
+```
+
+---
 
 ### isAdmin
 
@@ -1873,20 +2227,34 @@ function AdminFulfillment({ tokenId, owner }: { tokenId: bigint; owner: string }
 
 ## Quick Reference Card
 
-### TokenId Convention (SwagFactory)
+### Factory-First Flow
 ```
-// SwagFactory deploys one Swag1155 per item.
-// tokenIds are sequential (1-indexed), matching the sizes[] order passed to deployCollection():
-//   tokenId 1 = first size  (e.g. "S")
-//   tokenId 2 = second size (e.g. "M")
-//   tokenId 3 = third size  (e.g. "L")
-//   tokenId 4 = fourth size (e.g. "XL")
+1. Deploy infrastructure (one time per network):
+   npx hardhat run scripts/deploy-all.ts --network base
+   → ZKPassportNFT, FaucetManager, SwagFactory
 
-// ETH Cali Hoodie @ 0xABC — deployed via factory:
-//   token 1 → S (20 supply)   token 3 → L  (30 supply)
-//   token 2 → M (40 supply)   token 4 → XL (10 supply)
+2. Create a product (one time per item):
+   ITEM_NAME="ETH Cali Hoodie" ITEM_SKU="..." ITEM_SIZES_JSON='[...]' \
+   npx hardhat run scripts/deploy-collection.ts --network base
+   → New Swag1155 deployed & registered in factory
 
-// For standalone Swag1155 (without factory), any tokenId scheme is valid.
+3. Configure the product (on the Swag1155 address returned by factory):
+   → addRoyalty(), addPoapDiscount(), addPoapWhitelist(), addHolderDiscount()
+
+4. Frontend discovers products:
+   → factory.getActiveCollections()  → list of Swag1155 addresses
+   → factory.getCollectionMeta(addr) → name, SKU, variantCount
+   → swag1155.listTokenIds()         → [1n, 2n, 3n] (sizes)
+   → swag1155.getVariant(tokenId)    → price, supply, active
+```
+
+### TokenId Convention
+```
+TokenIds within a Swag1155 are 1-indexed, matching the sizes[] order from deployCollection():
+  tokenId 1 = first size  (e.g. S)
+  tokenId 2 = second size (e.g. M)
+  tokenId 3 = third size  (e.g. L)
+  tokenId 4 = fourth size (e.g. XL)
 ```
 
 ### Price Conversion
@@ -1896,7 +2264,7 @@ const toBaseUnits = (usd: number) => BigInt(Math.round(usd * 1e6));
 const toDisplay = (baseUnits: bigint) => Number(baseUnits) / 1e6;
 
 // Examples:
-toBaseUnits(25.50)  // → 25500000n
+toBaseUnits(25.50)   // → 25500000n
 toDisplay(25500000n) // → 25.5
 ```
 

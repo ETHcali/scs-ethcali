@@ -1,0 +1,8 @@
+{
+  "network": "celo",
+  "chainId": 42220,
+  "addresses": {
+    "DonationVault": "0x76235436cbD3F2ff12CC3610f2643654211Efb3d",
+    "DonationReceipt1155": "0x25B43cE10ffD04Cb90123D7582E6B5100B27f9cB"
+  }
+}

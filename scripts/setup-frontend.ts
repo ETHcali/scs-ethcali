@@ -14,8 +14,11 @@ const __dirname = dirname(__filename);
 interface DeploymentResult {
   zkPassportNFT: string;
   faucetManager: string;
-  swag1155: string;
-  swagFactory?: string;       // optional for legacy deployments
+  swag1155Implementation?: string;
+  swagFactory?: string;
+  hackathonStaking?: string;
+  donationVault?: string;
+  donationReceipt?: string;
   network: string;
   timestamp: string;
   config: {
@@ -39,8 +42,10 @@ interface NetworkConfig {
   contracts: {
     ZKPassportNFT: ContractInfo;
     FaucetManager: ContractInfo;
-    Swag1155: ContractInfo;
-    SwagFactory?: ContractInfo;  // UUPS proxy (optional for legacy deployments)
+    SwagFactory?: ContractInfo;
+    HackathonStaking?: ContractInfo;
+    DonationVault?: ContractInfo;
+    DonationReceipt1155?: ContractInfo;
   };
 }
 
@@ -54,6 +59,7 @@ const NETWORK_CHAIN_IDS: Record<string, number> = {
   ethereum: 1,
   unichain: 130,
   optimism: 10,
+  celo: 42220,
 };
 
 const NETWORK_NAMES: Record<string, string> = {
@@ -61,9 +67,10 @@ const NETWORK_NAMES: Record<string, string> = {
   ethereum: "Ethereum Mainnet",
   unichain: "Unichain Mainnet",
   optimism: "Optimism Mainnet",
+  celo: "Celo Mainnet",
 };
 
-const SUPPORTED_NETWORKS = ["base", "ethereum", "unichain", "optimism"];
+const SUPPORTED_NETWORKS = ["base", "ethereum", "unichain", "optimism", "celo"];
 
 async function main() {
   console.log("🚀 Setting up frontend files from deployments...\n");
@@ -84,10 +91,13 @@ async function main() {
 
   const nftABI = readABI("ZKPassportNFT");
   const faucetABI = readABI("FaucetManager");
-  const swagABI = readABI("Swag1155");
+  const swagABI = readABI("Swag1155");   // still needed for factory-deployed collections
   const factoryABI = readABI("SwagFactory");
+  const stakingABI = readABI("HackathonStaking");
+  const donationVaultABI = readABI("DonationVault");
+  const donationReceiptABI = readABI("DonationReceipt1155");
 
-  if (!nftABI.length || !faucetABI.length || !swagABI.length) {
+  if (!nftABI.length || !faucetABI.length) {
     console.error("❌ Missing ABIs. Run 'npm run compile' first.");
     process.exit(1);
   }
@@ -145,12 +155,17 @@ async function main() {
           address: deployment.faucetManager,
           abi: faucetABI,
         },
-        Swag1155: {
-          address: deployment.swag1155,
-          abi: swagABI,
-        },
         ...(deployment.swagFactory && factoryABI.length
           ? { SwagFactory: { address: deployment.swagFactory, abi: factoryABI } }
+          : {}),
+        ...(deployment.hackathonStaking && stakingABI.length
+          ? { HackathonStaking: { address: deployment.hackathonStaking, abi: stakingABI } }
+          : {}),
+        ...(deployment.donationVault && donationVaultABI.length
+          ? { DonationVault: { address: deployment.donationVault, abi: donationVaultABI } }
+          : {}),
+        ...(deployment.donationReceipt && donationReceiptABI.length
+          ? { DonationReceipt1155: { address: deployment.donationReceipt, abi: donationReceiptABI } }
           : {}),
       },
     };
@@ -176,10 +191,12 @@ async function main() {
       network: networkName,
       chainId,
       addresses: {
-        ZKPassportNFT:  deployment.zkPassportNFT,
-        FaucetManager:  deployment.faucetManager,
-        Swag1155:       deployment.swag1155,
-        ...(deployment.swagFactory     ? { SwagFactory:     deployment.swagFactory }     : {}),
+        ZKPassportNFT: deployment.zkPassportNFT,
+        FaucetManager: deployment.faucetManager,
+        ...(deployment.swagFactory ? { SwagFactory: deployment.swagFactory } : {}),
+        ...(deployment.hackathonStaking ? { HackathonStaking: deployment.hackathonStaking } : {}),
+        ...(deployment.donationVault ? { DonationVault: deployment.donationVault } : {}),
+        ...(deployment.donationReceipt ? { DonationReceipt1155: deployment.donationReceipt } : {}),
       },
     };
 
@@ -194,9 +211,17 @@ async function main() {
 export const CONTRACTS = ${JSON.stringify(networkConfig, null, 2)} as const;
 
 export const ADDRESSES = {
-  ZKPassportNFT: "${deployment.zkPassportNFT}",
-  FaucetManager: "${deployment.faucetManager}",
-  Swag1155: "${deployment.swag1155}",${deployment.swagFactory ? `\n  SwagFactory: "${deployment.swagFactory}",` : ""}
+${[
+  ["ZKPassportNFT", deployment.zkPassportNFT],
+  ["FaucetManager", deployment.faucetManager],
+  ["SwagFactory", deployment.swagFactory],
+  ["HackathonStaking", deployment.hackathonStaking],
+  ["DonationVault", deployment.donationVault],
+  ["DonationReceipt1155", deployment.donationReceipt],
+]
+  .filter(([, addr]) => Boolean(addr))
+  .map(([name, addr]) => `  ${name}: "${addr}",`)
+  .join("\n")}
 } as const;
 
 export const CHAIN_ID = ${chainId} as const;
@@ -205,11 +230,12 @@ export const NETWORK = "${networkName}" as const;
     writeFileSync(join(networkDir, "contracts.ts"), typesContent);
 
     console.log(`   ✅ Created files in frontend/${networkName}/`);
-    console.log(`      - ZKPassportNFT: ${deployment.zkPassportNFT}`);
-    console.log(`      - FaucetManager: ${deployment.faucetManager}`);
-    console.log(`      - Swag1155: ${deployment.swag1155}`);
+    if (deployment.zkPassportNFT) console.log(`      - ZKPassportNFT: ${deployment.zkPassportNFT}`);
+    if (deployment.faucetManager) console.log(`      - FaucetManager: ${deployment.faucetManager}`);
+    if (deployment.donationVault) console.log(`      - DonationVault: ${deployment.donationVault}`);
+    if (deployment.donationReceipt) console.log(`      - DonationReceipt1155: ${deployment.donationReceipt}`);
     if (deployment.swagFactory) {
-      console.log(`      - SwagFactory:   ${deployment.swagFactory} (proxy)`);
+      console.log(`      - SwagFactory:   ${deployment.swagFactory}`);
     }
     console.log("");
   }
@@ -234,8 +260,10 @@ export const NETWORK = "${networkName}" as const;
       addresses: {
         ZKPassportNFT: config.contracts.ZKPassportNFT.address,
         FaucetManager: config.contracts.FaucetManager.address,
-        Swag1155:      config.contracts.Swag1155.address,
         ...(config.contracts.SwagFactory ? { SwagFactory: config.contracts.SwagFactory.address } : {}),
+        ...(config.contracts.HackathonStaking ? { HackathonStaking: config.contracts.HackathonStaking.address } : {}),
+        ...(config.contracts.DonationVault ? { DonationVault: config.contracts.DonationVault.address } : {}),
+        ...(config.contracts.DonationReceipt1155 ? { DonationReceipt1155: config.contracts.DonationReceipt1155.address } : {}),
       },
     };
   }
@@ -265,6 +293,24 @@ export const NETWORK = "${networkName}" as const;
     writeFileSync(
       join(abisDir, "SwagFactory.json"),
       JSON.stringify(factoryABI, null, 2)
+    );
+  }
+  if (stakingABI.length) {
+    writeFileSync(
+      join(abisDir, "HackathonStaking.json"),
+      JSON.stringify(stakingABI, null, 2)
+    );
+  }
+  if (donationVaultABI.length) {
+    writeFileSync(
+      join(abisDir, "DonationVault.json"),
+      JSON.stringify(donationVaultABI, null, 2)
+    );
+  }
+  if (donationReceiptABI.length) {
+    writeFileSync(
+      join(abisDir, "DonationReceipt1155.json"),
+      JSON.stringify(donationReceiptABI, null, 2)
     );
   }
   console.log(`✅ Created frontend/abis/ (shared ABIs${factoryABI.length ? " including SwagFactory" : ""})`);
@@ -307,7 +353,8 @@ frontend/
 ├── abis/                  # Shared ABIs (same for all networks)
 │   ├── ZKPassportNFT.json
 │   ├── FaucetManager.json
-│   └── Swag1155.json
+│   ├── SwagFactory.json   # Factory registry — use getActiveCollections() to discover products
+│   └── Swag1155.json      # Product contract ABI — used with addresses returned by SwagFactory
 ${Object.keys(multiNetworkConfig.networks)
   .map(
     (n) => `├── ${n}/                  # ${NETWORK_NAMES[n] || n} specific files
@@ -323,27 +370,29 @@ ${Object.keys(multiNetworkConfig.networks)
 ### Multi-Network (Recommended)
 
 \`\`\`typescript
-import { getAddresses, getContracts, DEFAULT_NETWORK } from './contracts';
-import ZKPassportNFT_ABI from './abis/ZKPassportNFT.json';
+import { getAddresses } from './contracts';
+import SwagFactory_ABI from './abis/SwagFactory.json';
+import Swag1155_ABI from './abis/Swag1155.json';
 import FaucetManager_ABI from './abis/FaucetManager.json';
 
-// Get addresses for a specific network
+// Infrastructure addresses per network (ZKPassportNFT, FaucetManager, SwagFactory)
 const baseAddresses = getAddresses('base');
-const ethereumAddresses = getAddresses('ethereum');
-const unichainAddresses = getAddresses('unichain');
 
-// Use with ethers.js
-const nftContract = new ethers.Contract(
-  baseAddresses.addresses.ZKPassportNFT,
-  ZKPassportNFT_ABI,
-  signer
+// Discover swag products via factory — do NOT hardcode Swag1155 addresses
+const factory = new ethers.Contract(
+  baseAddresses.addresses.SwagFactory,
+  SwagFactory_ABI,
+  provider
 );
+const activeCollections = await factory.getActiveCollections();
 
-const faucetContract = new ethers.Contract(
-  baseAddresses.addresses.FaucetManager,
-  FaucetManager_ABI,
-  signer
-);
+// Interact with each product using Swag1155 ABI
+for (const addr of activeCollections) {
+  const meta    = await factory.getCollectionMeta(addr);
+  const product = new ethers.Contract(addr, Swag1155_ABI, provider);
+  const tokenIds = await product.listTokenIds();
+  // Build product cards from meta.name, tokenIds, variant prices/supply
+}
 \`\`\`
 
 ### Single Network
@@ -384,8 +433,7 @@ ${Object.entries(multiNetworkConfig.networks)
     ([name, config]) =>
       `- **${NETWORK_NAMES[name] || name}** (Chain ID: ${config.chainId})
   - ZKPassportNFT: \`${config.contracts.ZKPassportNFT.address}\`
-  - FaucetManager: \`${config.contracts.FaucetManager.address}\`
-  - Swag1155: \`${config.contracts.Swag1155.address}\``
+  - FaucetManager: \`${config.contracts.FaucetManager.address}\`${config.contracts.SwagFactory ? `\n  - SwagFactory: \`${config.contracts.SwagFactory.address}\`` : ""}`
   )
   .join("\n\n")}
 

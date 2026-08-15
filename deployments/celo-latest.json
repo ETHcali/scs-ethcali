@@ -1,0 +1,18 @@
+{
+  "donationVault": "0x76235436cbD3F2ff12CC3610f2643654211Efb3d",
+  "donationReceipt": "0x25B43cE10ffD04Cb90123D7582E6B5100B27f9cB",
+  "network": "celo",
+  "timestamp": "2026-08-15T17:57:03.305Z",
+  "donationConfig": {
+    "deployer": "0x3b89ad8cc39900778abcdcc22bc83cac031a415b",
+    "custodyAdmin": "0xB6BDe4fB6dFBad5488Fa31Edf0F3730D9D86da64",
+    "beneficiary": "0xB6BDe4fB6dFBad5488Fa31Edf0F3730D9D86da64",
+    "opsAdmins": [
+      "0x3B89Ad8CC39900778aBCdcc22bc83cAC031A415B",
+      "0x35b0c64CeDC2fD1a7298984CBa5C7E402970BC6B"
+    ],
+    "custodyTransferred": true,
+    "usdc": "0xcebA9300f2b948710d2653dD7B07f33A8B32118C",
+    "copm": "0x8a567e2ae79ca692bd748ab832081c45de4041ea"
+  }
+}

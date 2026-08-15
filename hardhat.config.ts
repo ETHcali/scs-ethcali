@@ -15,7 +15,7 @@ export default defineConfig({
         settings: {
           optimizer: {
             enabled: true,
-            runs: 200,
+            runs: 1,
           },
           viaIR: true,
         },
@@ -25,7 +25,7 @@ export default defineConfig({
         settings: {
           optimizer: {
             enabled: true,
-            runs: 200,
+            runs: 1,
           },
           viaIR: true,
         },
@@ -71,6 +71,14 @@ export default defineConfig({
       url: configVariable("OPTIMISM_RPC_URL"),
       accounts: [configVariable("PRIVATE_KEY")],
     },
+    celo: {
+      type: "http",
+      chainType: "l1",
+      // forno is Celo's public RPC and needs no key, so this falls back instead
+      // of hard-failing when CELO_RPC_URL is absent from .env.
+      url: process.env.CELO_RPC_URL || "https://forno.celo.org",
+      accounts: [configVariable("PRIVATE_KEY")],
+    },
   },
   verify: {
     etherscan: {
@@ -83,6 +91,7 @@ export default defineConfig({
       base: process.env.BASESCAN_API || "",
       unichain: process.env.UNICHAIN_API_KEY || "",
       optimism: process.env.OPTIMISM_API_KEY || "",
+      celo: process.env.CELOSCAN_API_KEY || "",
     },
     customChains: [
       {
@@ -107,6 +116,14 @@ export default defineConfig({
         urls: {
           apiURL: "https://api-optimistic.etherscan.io/api",
           browserURL: "https://optimistic.etherscan.io",
+        },
+      },
+      {
+        network: "celo",
+        chainId: 42220,
+        urls: {
+          apiURL: "https://api.celoscan.io/api",
+          browserURL: "https://celoscan.io",
         },
       },
     ],

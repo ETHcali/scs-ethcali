@@ -11,6 +11,9 @@ interface DeploymentResult {
   faucetManager: string;
   swag1155: string;
   swagFactory?: string;
+  hackathonStaking?: string;
+  donationVault?: string;
+  donationReceipt?: string;
   network: string;
   timestamp: string;
   config: {

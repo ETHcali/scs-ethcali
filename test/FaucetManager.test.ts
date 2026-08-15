@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it, before } from "node:test";
 import { network } from "hardhat";
 import { parseEther } from "viem";
+import { deployZKPassport, mintPassport } from "./helpers/zkpassport.js";
 
 describe("FaucetManager", async function () {
   const { viem } = await network.connect();
@@ -10,14 +11,15 @@ describe("FaucetManager", async function () {
 
   let faucetManager: any;
   let zkPassportNFT: any;
+  let mockVerifier: any;
 
   before(async function () {
-    // Deploy ZKPassportNFT first with owner as initial owner
-    zkPassportNFT = await viem.deployContract("ZKPassportNFT", [
-      "ZKPassport",
-      "ZKPASS",
-      owner.account.address, // initialOwner
-    ]);
+    // Deploy ZKPassportNFT (wired to a mock verifier) with owner as initial owner
+    ({ nft: zkPassportNFT, verifier: mockVerifier } = await deployZKPassport(
+      viem,
+      owner.account.address,
+      { symbol: "ZKPASS" }
+    ));
 
     // Deploy FaucetManager with owner as initial admin
     faucetManager = await viem.deployContract("FaucetManager", [
@@ -26,15 +28,8 @@ describe("FaucetManager", async function () {
     ]);
 
     // Mint ZKPassport NFTs for users
-    await zkPassportNFT.write.mintWithVerification(
-      ["user1_unique_id", true, true],
-      { account: user1.account }
-    );
-
-    await zkPassportNFT.write.mintWithVerification(
-      ["user2_unique_id", true, true],
-      { account: user2.account }
-    );
+    await mintPassport(viem, zkPassportNFT, mockVerifier, user1.account, "faucetmanager-user1");
+    await mintPassport(viem, zkPassportNFT, mockVerifier, user2.account, "faucetmanager-user2");
   });
 
   // ==================== DEPLOYMENT TESTS ====================

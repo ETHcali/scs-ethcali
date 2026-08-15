@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/proxy/Clones.sol";
 import "./Swag1155.sol";
 
 /**
@@ -17,33 +18,43 @@ import "./Swag1155.sol";
  *   5. Factory registers the collection in its own registry and emits CollectionDeployed.
  */
 contract SwagFactory is AccessControl {
+    using Clones for address;
+
     // ── Roles ────────────────────────────────────────────────────────────────
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     // ── Structs ───────────────────────────────────────────────────────────────
 
+    /// @notice A single payment option: one token + its price in that token's base units.
+    struct PaymentOption {
+        address token; // ERC-20 address, or Swag1155.ETH_TOKEN (0xEeee...EEeE) for native ETH
+        uint256 price; // Price in that token's base units (e.g. 25_000_000 for 25 USDC)
+    }
+
     /// @notice Metadata stored in the factory registry per deployed collection.
     struct CollectionMeta {
-        string  name;          // Human-readable product name, e.g. "ETH Cali Hoodie"
-        string  sku;           // Internal SKU, e.g. "ETH-CALI-HOODIE-2025"
-        address paymentToken;  // ERC-20 token accepted for payment
-        address treasury;      // Where sale proceeds are sent
-        address creator;       // msg.sender at deployCollection time
-        uint256 deployedAt;    // block.timestamp at deploy
-        uint256 variantCount;  // Number of sizes (tokenIds)
-        bool    active;        // Factory-level toggle (does not affect the Swag1155 itself)
+        string  name;         // Human-readable product name, e.g. "ETH Cali Hoodie"
+        string  sku;          // Internal SKU, e.g. "ETH-CALI-HOODIE-2025"
+        address treasury;     // Where sale proceeds are sent
+        address creator;      // msg.sender at deployCollection time
+        uint256 deployedAt;   // block.timestamp at deploy
+        uint256 variantCount; // Number of sizes (tokenIds)
+        bool    active;       // Factory-level toggle (does not affect the Swag1155 itself)
     }
 
     /// @notice Input descriptor for one size variant supplied to deployCollection.
     struct VariantInit {
-        string  metadataURI; // Full IPFS URI for this size's metadata, e.g. "ipfs://Qm.../s.json"
-        uint256 price;       // Price in payment token base units (e.g. USDC with 6 decimals)
-        uint256 maxSupply;   // Maximum inventory for this size
-        bool    active;      // Whether this size is purchasable at launch
+        string          metadataURI; // Full IPFS URI for this size's metadata
+        uint256         maxSupply;   // Maximum inventory for this size
+        bool            active;      // Whether this size is purchasable at launch
+        PaymentOption[] payments;    // One entry per accepted payment token + price
     }
 
     // ── State ─────────────────────────────────────────────────────────────────
+
+    /// @notice Reference implementation cloned for each new product collection.
+    address public immutable implementation;
 
     /// @dev Ordered list of every deployed Swag1155 address.
     address[] public collections;
@@ -60,7 +71,6 @@ contract SwagFactory is AccessControl {
         address indexed collection,
         string  name,
         string  sku,
-        address paymentToken,
         address treasury,
         uint256 variantCount,
         address indexed creator
@@ -71,71 +81,86 @@ contract SwagFactory is AccessControl {
     // ── Custom errors ─────────────────────────────────────────────────────────
 
     error InvalidAdmin();
-    error InvalidPaymentToken();
     error InvalidTreasury();
     error InvalidItemAdmin();
     error InvalidAddress();
     error EmptyName();
     error EmptySku();
     error NoSizes();
+    error NoPaymentOptions();
     error NotACollection();
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
     /**
-     * @param admin Address that receives DEFAULT_ADMIN_ROLE and ADMIN_ROLE.
+     * @param admin           Address that receives DEFAULT_ADMIN_ROLE and ADMIN_ROLE.
+     * @param _implementation Address of the deployed Swag1155 reference implementation.
+     *                        Each collection is an EIP-1167 minimal clone of this contract.
      */
-    constructor(address admin) {
+    constructor(address admin, address _implementation) {
         if (admin == address(0)) revert InvalidAdmin();
+        if (_implementation == address(0)) revert InvalidAddress();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ADMIN_ROLE, admin);
+        implementation = _implementation;
     }
 
     // ── Core: Deploy a collection ─────────────────────────────────────────────
 
     /**
-     * @notice Deploy a new Swag1155 product with all sizes configured atomically.
+     * @notice Deploy a new Swag1155 product with all sizes and payment options configured atomically.
      *
-     * @param name         Human-readable product name ("ETH Cali Hoodie").
-     * @param sku          Internal SKU identifier ("ETH-CALI-HOODIE-2025").
-     * @param paymentToken ERC-20 address used for payment (e.g. USDC).
-     * @param treasury     Address that receives sale proceeds.
-     * @param itemAdmin    Address that will own and manage the deployed Swag1155.
-     * @param sizes        Array of VariantInit structs.  tokenId = array index + 1.
-     * @return swagAddr    Address of the newly deployed Swag1155.
+     * @param name      Human-readable product name ("ETH Cali Hoodie").
+     * @param sku       Internal SKU identifier ("ETH-CALI-HOODIE-2025").
+     * @param treasury  Address that receives sale proceeds.
+     * @param itemAdmin Address that will own and manage the deployed Swag1155.
+     * @param sizes     Array of VariantInit structs.  tokenId = array index + 1.
+     *                  Each size includes its own PaymentOption[] (token + price per token).
+     * @return swagAddr Address of the newly deployed Swag1155.
      */
     function deployCollection(
         string        calldata name,
         string        calldata sku,
-        address                paymentToken,
         address                treasury,
         address                itemAdmin,
         VariantInit[] calldata sizes
     ) external onlyRole(ADMIN_ROLE) returns (address swagAddr) {
-        if (bytes(name).length == 0)    revert EmptyName();
-        if (bytes(sku).length  == 0)    revert EmptySku();
-        if (paymentToken == address(0)) revert InvalidPaymentToken();
-        if (treasury     == address(0)) revert InvalidTreasury();
-        if (itemAdmin    == address(0)) revert InvalidItemAdmin();
-        if (sizes.length == 0)          revert NoSizes();
+        if (bytes(name).length == 0) revert EmptyName();
+        if (bytes(sku).length  == 0) revert EmptySku();
+        if (treasury  == address(0)) revert InvalidTreasury();
+        if (itemAdmin == address(0)) revert InvalidItemAdmin();
+        if (sizes.length == 0)       revert NoSizes();
 
-        // 1. Deploy Swag1155; factory is initialAdmin so it can configure variants.
-        Swag1155 swag = new Swag1155(
-            sizes[0].metadataURI, // baseURI (each tokenId will override with its own URI)
-            paymentToken,
+        // Validate at least one payment option across all sizes
+        for (uint256 i; i < sizes.length; i++) {
+            if (sizes[i].payments.length == 0) revert NoPaymentOptions();
+        }
+
+        // 1. Clone Swag1155 implementation (EIP-1167 minimal proxy) and initialize it.
+        //    Factory is initialAdmin so it can configure variants, then transfers control.
+        Swag1155 swag = Swag1155(implementation.clone());
+        swag.initialize(
+            sizes[0].metadataURI, // baseURI (each tokenId overrides with its own URI)
             treasury,
             address(this)
         );
 
-        // 2. Configure each size as tokenId (1-indexed).
+        // 2. Configure each size as tokenId (1-indexed): variant + payment options.
         for (uint256 i; i < sizes.length; i++) {
+            uint256 tokenId = i + 1;
             swag.setVariantWithURI(
-                i + 1,
-                sizes[i].price,
+                tokenId,
                 sizes[i].maxSupply,
                 sizes[i].active,
                 sizes[i].metadataURI
             );
+            for (uint256 j; j < sizes[i].payments.length; j++) {
+                swag.setPaymentOption(
+                    tokenId,
+                    sizes[i].payments[j].token,
+                    sizes[i].payments[j].price
+                );
+            }
         }
 
         // 3. Grant itemAdmin full control: DEFAULT_ADMIN_ROLE + ADMIN_ROLE.
@@ -153,7 +178,6 @@ contract SwagFactory is AccessControl {
         collectionMeta[swagAddr] = CollectionMeta({
             name:         name,
             sku:          sku,
-            paymentToken: paymentToken,
             treasury:     treasury,
             creator:      msg.sender,
             deployedAt:   block.timestamp,
@@ -161,7 +185,7 @@ contract SwagFactory is AccessControl {
             active:       true
         });
 
-        emit CollectionDeployed(swagAddr, name, sku, paymentToken, treasury, sizes.length, msg.sender);
+        emit CollectionDeployed(swagAddr, name, sku, treasury, sizes.length, msg.sender);
     }
 
     // ── Collection management ─────────────────────────────────────────────────

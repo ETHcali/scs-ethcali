@@ -12,7 +12,8 @@ frontend/
 ├── abis/                  # Shared ABIs (same for all networks)
 │   ├── ZKPassportNFT.json
 │   ├── FaucetManager.json
-│   └── Swag1155.json
+│   ├── SwagFactory.json   # Factory registry — use getActiveCollections() to discover products
+│   └── Swag1155.json      # Product contract ABI — used with addresses returned by SwagFactory
 ├── base/                  # Base Mainnet specific files
 │   ├── contracts.json
 │   ├── addresses.json
@@ -29,6 +30,10 @@ frontend/
 │   ├── contracts.json
 │   ├── addresses.json
 │   └── contracts.ts
+├── celo/                  # Celo Mainnet specific files
+│   ├── contracts.json
+│   ├── addresses.json
+│   └── contracts.ts
 ```
 
 ## Usage Examples
@@ -36,27 +41,29 @@ frontend/
 ### Multi-Network (Recommended)
 
 ```typescript
-import { getAddresses, getContracts, DEFAULT_NETWORK } from './contracts';
-import ZKPassportNFT_ABI from './abis/ZKPassportNFT.json';
+import { getAddresses } from './contracts';
+import SwagFactory_ABI from './abis/SwagFactory.json';
+import Swag1155_ABI from './abis/Swag1155.json';
 import FaucetManager_ABI from './abis/FaucetManager.json';
 
-// Get addresses for a specific network
+// Infrastructure addresses per network (ZKPassportNFT, FaucetManager, SwagFactory)
 const baseAddresses = getAddresses('base');
-const ethereumAddresses = getAddresses('ethereum');
-const unichainAddresses = getAddresses('unichain');
 
-// Use with ethers.js
-const nftContract = new ethers.Contract(
-  baseAddresses.addresses.ZKPassportNFT,
-  ZKPassportNFT_ABI,
-  signer
+// Discover swag products via factory — do NOT hardcode Swag1155 addresses
+const factory = new ethers.Contract(
+  baseAddresses.addresses.SwagFactory,
+  SwagFactory_ABI,
+  provider
 );
+const activeCollections = await factory.getActiveCollections();
 
-const faucetContract = new ethers.Contract(
-  baseAddresses.addresses.FaucetManager,
-  FaucetManager_ABI,
-  signer
-);
+// Interact with each product using Swag1155 ABI
+for (const addr of activeCollections) {
+  const meta    = await factory.getCollectionMeta(addr);
+  const product = new ethers.Contract(addr, Swag1155_ABI, provider);
+  const tokenIds = await product.listTokenIds();
+  // Build product cards from meta.name, tokenIds, variant prices/supply
+}
 ```
 
 ### Single Network
@@ -95,22 +102,25 @@ function MyComponent({ chainId }: { chainId: number }) {
 - **Base Mainnet** (Chain ID: 8453)
   - ZKPassportNFT: `0xa3f1150a8414b0383244e7c7936119e3e24d106d`
   - FaucetManager: `0x145d0d587bce7e390750cd67301e02478c51b48c`
-  - Swag1155: `0xfc87358e017ec814fe94139af82e6f25b293d5b8`
+  - SwagFactory: `0x89fb2a22bbb309703019b34439ae70b7e6d81e96`
 
 - **Ethereum Mainnet** (Chain ID: 1)
   - ZKPassportNFT: `0x607003f188c49ed6e0553805734b9990393402df`
   - FaucetManager: `0x2940e286b41d279b61e484b98a08498e355e4778`
-  - Swag1155: `0xd9663db045850171850fd1298a2176b329a67928`
 
 - **Unichain Mainnet** (Chain ID: 130)
   - ZKPassportNFT: `0xc2ddade57815220833c31ecab6f6e9de9c69df09`
   - FaucetManager: `0xdf1be43ae0636ba6f9bc26f75ab6ba8d66a3ddc8`
-  - Swag1155: `0x5811f284e340f6968bcffe2415e582e0eb429981`
+  - SwagFactory: `0x79abd2dabe18fa1086e210c41b622ed6011e0c85`
 
 - **Optimism Mainnet** (Chain ID: 10)
   - ZKPassportNFT: `0x607003f188c49ed6e0553805734b9990393402df`
   - FaucetManager: `0x2940e286b41d279b61e484b98a08498e355e4778`
-  - Swag1155: `0xd9663db045850171850fd1298a2176b329a67928`
+  - SwagFactory: `0x94b9f649f8825d5d797e37d04dfc66d612750b10`
+
+- **Celo Mainnet** (Chain ID: 42220)
+  - ZKPassportNFT: `undefined`
+  - FaucetManager: `undefined`
 
 ## Default Network
 

@@ -1,6 +1,13 @@
 # Frontend Integration Reference
 
-Single source of truth for all contract features. Use this to plan frontend implementation.
+Single source of truth for all contract features and the current implementation status.
+
+**Current alignment (March 2026):**
+- Contracts deployed on Base, Unichain, Optimism (SwagFactory + FaucetManager + ZKPassportNFT)
+- `deploy-all.ts` deploys infrastructure only — no standalone Swag1155
+- Products are created exclusively via `SwagFactory.deployCollection()`
+- `frontend/addresses.json` contains `SwagFactory` address per network (no `Swag1155`)
+- ABIs are up to date in `frontend/abis/`
 
 ---
 
@@ -362,26 +369,37 @@ USDC_ADDRESS_OP=0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85
 
 ---
 
-## 7. Updated ABIs
+## 7. ABIs — Current State
 
-Regenerated ABIs in `frontend/abis/`:
+All ABIs are up to date in `frontend/abis/`. **Do not regenerate unless contracts change.**
 
-### FaucetManager.json
-- Updated `createVault` (7 params)
-- Added `updateVaultGating` function
-- Updated `Vault` struct (added zkPassportRequired, allowedToken)
-- Updated `VaultCreated` event (added zkPassportRequired, allowedToken)
-- Added `VaultGatingUpdated` event
+### FaucetManager.json ✅
+- `createVault` (7 params: +zkPassportRequired, +allowedToken)
+- `updateVaultGating` function
+- Updated `Vault` struct
+- `VaultCreated` and `VaultGatingUpdated` events
 
-### Swag1155.json
-- Constructor: 4 params (baseURI, _usdc, _treasury, initialAdmin) — POAP_CONTRACT removed (see Section 10)
-- Added royalty functions: `addRoyalty`, `clearRoyalties`, `getRoyalties`, `totalRoyaltyBps`
-- Added POAP discount functions: `addPoapDiscount`, `removePoapDiscount`, `getPoapDiscounts`
-- Added holder discount functions: `addHolderDiscount`, `removeHolderDiscount`, `getHolderDiscounts`
-- Added `getDiscountedPrice` function
-- Updated events: RoyaltyAdded, RoyaltiesCleared, PoapDiscountAdded, etc.
+### Swag1155.json ✅
+- Constructor: 4 params (baseURI, _usdc, _treasury, initialAdmin)
+- Royalty functions: `addRoyalty`, `clearRoyalties`, `getRoyalties`, `totalRoyaltyBps`
+- POAP discount functions: `addPoapDiscount`, `removePoapDiscount`, `getPoapDiscounts`
+- POAP whitelist functions: `addPoapWhitelist`, `removePoapWhitelist`, `isPoapWhitelisted`
+- Holder discount functions: `addHolderDiscount`, `removeHolderDiscount`, `getHolderDiscounts`
+- `getDiscountedPrice`, `listTokenIds`, `getSerialOwner`
+- Serial number events: `SerialMinted`
 
-### ZKPassportNFT.json
+> This ABI is used to interact with **factory-deployed collections** (not a standalone contract).
+> Do not reference a single `Swag1155` address — use `SwagFactory.getActiveCollections()` to
+> discover product contract addresses.
+
+### SwagFactory.json ✅
+- `deployCollection` — creates a new Swag1155 per product
+- `getCollections`, `getActiveCollections`, `getCollectionMeta`, `getCollectionCount`
+- `setCollectionActive`, `isCollection`
+- `addAdmin`, `removeAdmin`
+- `CollectionDeployed`, `CollectionStatusChanged` events
+
+### ZKPassportNFT.json ✅
 - No changes
 
 ---
@@ -438,122 +456,168 @@ event DiscountApplied(address indexed buyer, uint256 indexed tokenId, uint256 or
 
 ## Quick Reference: Key Function Calls
 
+### Admin: Deploy a New Product via Factory
+```typescript
+// swagFactoryAddress from frontend/addresses.json → SwagFactory
+await writeContract({
+  address: swagFactoryAddress,
+  abi: SwagFactoryABI,
+  functionName: 'deployCollection',
+  args: [
+    'ETH Cali Hoodie',
+    'ETH-CALI-HOODIE-2025',
+    usdcAddress,
+    treasuryAddress,
+    itemAdminAddress,
+    [
+      { metadataURI: 'ipfs://QmS.../s.json', price: 25000000n, maxSupply: 50n,  active: true },
+      { metadataURI: 'ipfs://QmM.../m.json', price: 25000000n, maxSupply: 100n, active: true },
+      { metadataURI: 'ipfs://QmL.../l.json', price: 25000000n, maxSupply: 75n,  active: true },
+    ],
+  ],
+});
+// After tx confirms, read getCollections() for the new Swag1155 address
+```
+
+### Frontend: Enumerate Products
+```typescript
+// All live products
+const collections = await readContract({
+  address: swagFactoryAddress, abi: SwagFactoryABI,
+  functionName: 'getActiveCollections',
+});
+for (const addr of collections) {
+  const meta     = await readContract({ address: swagFactoryAddress, abi: SwagFactoryABI,
+                     functionName: 'getCollectionMeta', args: [addr] });
+  const tokenIds = await readContract({ address: addr, abi: Swag1155ABI,
+                     functionName: 'listTokenIds' });
+  // Build product card from meta.name, meta.sku, tokenIds
+}
+```
+
 ### Admin: Create Vault with Gating
 ```typescript
-await faucetManager.createVault(
-  "ETHGlobal 2026",
-  "Hackathon faucet",
-  parseEther("0.1"),
-  0,                                    // VaultType.NonReturnable
-  false,                                // whitelistEnabled
-  true,                                 // zkPassportRequired
-  "0x1234..."                           // allowedToken (or 0x0)
-);
+await writeContract({
+  address: faucetManagerAddress, abi: FaucetManagerABI,
+  functionName: 'createVault',
+  args: ["ETHGlobal 2026", "Hackathon faucet", parseEther("0.1"),
+         0, false, true, "0x1234..."],
+  //     vaultType  whitelist  zkPassport  allowedToken
+});
 ```
 
 ### Admin: Update Existing Vault Gating
 ```typescript
-await faucetManager.updateVaultGating(
-  vaultId,
-  true,                                 // zkPassportRequired
-  "0x5678..."                           // allowedToken
-);
+await writeContract({
+  address: faucetManagerAddress, abi: FaucetManagerABI,
+  functionName: 'updateVaultGating',
+  args: [vaultId, true, "0x5678..."],
+});
 ```
 
-### Admin: Add Product Royalty
+### Admin: Configure Product (on a specific Swag1155 address)
 ```typescript
-await swag1155.addRoyalty(
-  tokenId,
-  "0xArtist...",
-  500                                   // 5% royalty
-);
-```
+const collectionAddr = '0xAAA...'; // from factory
 
-### Admin: Add POAP Discount
-```typescript
-await swag1155.addPoapDiscount(
-  tokenId,
-  12345,                                // POAP eventId
-  1000                                  // 10% discount
-);
-```
+// 5% royalty for artist
+await writeContract({ address: collectionAddr, abi: Swag1155ABI,
+  functionName: 'addRoyalty', args: [tokenId, '0xArtist...', 500n] });
 
-### Admin: Add Holder Discount (Percentage)
-```typescript
-await swag1155.addHolderDiscount(
-  tokenId,
-  "0xTokenAddress...",
-  0,                                    // DiscountType.Percentage
-  1500                                  // 15% discount
-);
-```
+// 10% POAP discount for eventId 12345 on tokenId 1
+await writeContract({ address: collectionAddr, abi: Swag1155ABI,
+  functionName: 'addPoapDiscount', args: [1n, 12345n, 1000n] });
 
-### Admin: Add Holder Discount (Fixed)
-```typescript
-await swag1155.addHolderDiscount(
-  tokenId,
-  "0xTokenAddress...",
-  1,                                    // DiscountType.Fixed
-  2000000                               // $2.00 off (6-decimal USDC)
-);
+// Whitelist attendees for that discount
+await writeContract({ address: collectionAddr, abi: Swag1155ABI,
+  functionName: 'addPoapWhitelist', args: [1n, 12345n, ['0xUser1...', '0xUser2...']] });
+
+// 15% off for NFT holders
+await writeContract({ address: collectionAddr, abi: Swag1155ABI,
+  functionName: 'addHolderDiscount', args: [1n, '0xNFTAddr...', 0, 1500n] });
+
+// $2 fixed off for ERC20 holders
+await writeContract({ address: collectionAddr, abi: Swag1155ABI,
+  functionName: 'addHolderDiscount', args: [1n, '0xERC20Addr...', 1, 2000000n] });
 ```
 
 ### User: Check Claim Eligibility
 ```typescript
-const [canClaim, reason] = await faucetManager.canUserClaim(vaultId, userAddress);
+const [canClaim, reason] = await readContract({
+  address: faucetManagerAddress, abi: FaucetManagerABI,
+  functionName: 'canUserClaim', args: [vaultId, userAddress],
+});
 if (!canClaim) {
-  console.log(reason);  // "Must own ZKPassport NFT", etc.
+  // reason: "Must own ZKPassport NFT" | "Must hold required token" | ...
 }
 ```
 
-### User: Get Discounted Price
+### User: Get Discounted Price and Buy
 ```typescript
-const discountedPrice = await swag1155.getDiscountedPrice(tokenId, userAddress);
-const basePrice = await swag1155.variants(tokenId).price;
-
-if (discountedPrice < basePrice) {
-  // Show discount badge
-  const savings = basePrice - discountedPrice;
-}
-```
-
-### User: Buy with Discount (Automatic)
-```typescript
-// 1. Approve USDC (use discounted price)
-const discountedPrice = await swag1155.getDiscountedPrice(tokenId, userAddress);
+// collectionAddr discovered from factory
+const discountedPrice = await readContract({
+  address: collectionAddr, abi: Swag1155ABI,
+  functionName: 'getDiscountedPrice', args: [tokenId, buyerAddress],
+});
 const totalPrice = discountedPrice * quantity;
 
-if (totalPrice > 0) {
-  await usdc.approve(swag1155Address, totalPrice);
+// Approve USDC (skip if free)
+if (totalPrice > 0n) {
+  await writeContract({ address: usdcAddress, abi: ERC20ABI,
+    functionName: 'approve', args: [collectionAddr, totalPrice] });
 }
 
-// 2. Buy (discount applied automatically)
-await swag1155.buy(tokenId, quantity);
-// Contract uses discounted price internally
+// Buy (discount applied automatically on-chain)
+await writeContract({ address: collectionAddr, abi: Swag1155ABI,
+  functionName: 'buy', args: [tokenId, quantity] });
 ```
 
 ---
 
-## Migration Checklist
+## Implementation Checklist
 
-- [ ] Update FaucetManager ABI
-- [ ] Update Swag1155 ABI
-- [ ] Add SwagFactory ABI (`frontend/abis/SwagFactory.json`)
-- [ ] Update vault creation form (add zkPassportRequired, allowedToken)
-- [ ] Add "Update Gating" button on vault management UI
-- [ ] Update `canUserClaim` error message display
-- [ ] Add royalty management UI per product
-- [ ] Replace POAP on-chain check with POAP whitelist admin UI (addPoapWhitelist / removePoapWhitelist)
-- [ ] Add holder discount management UI per product
-- [ ] Update store to call `getDiscountedPrice` on wallet connect
-- [ ] Show discount badges and strikethrough prices
-- [ ] Update USDC approval to use discounted total
-- [ ] Handle 100% discount case (no USDC transfer)
-- [ ] Update .env variable names
-- [ ] Add network switcher for 4 chains
-- [ ] Add SwagFactory admin UI: deployCollection form + collection list
-- [ ] Subscribe to `SerialMinted` events for inventory/receipt tracking
-- [ ] Call `getActiveCollections()` on SwagFactory to enumerate live products
+### Done — contracts, scripts, and addresses aligned ✅
+
+- [x] FaucetManager ABI updated (`frontend/abis/FaucetManager.json`)
+- [x] Swag1155 ABI updated (`frontend/abis/Swag1155.json`)
+- [x] SwagFactory ABI added (`frontend/abis/SwagFactory.json`)
+- [x] `.env` variable names updated (`SWAG_ADMIN`, `FAUCET_ADMIN`, `ZK_PASSPORT_ADMIN`, `SWAG_TREASURY_ADDRESS`)
+- [x] `deploy-all.ts` deploys infrastructure only — no standalone Swag1155
+- [x] `deploy-collection.ts` creates products via factory
+- [x] `frontend/addresses.json` — `Swag1155` removed, `SwagFactory` is the entry point
+- [x] `setup-frontend.ts` generates factory-only addresses
+- [x] SwagFactory deployed on Base, Unichain, Optimism
+- [x] POAP discount uses admin-managed whitelist (no on-chain POAP contract call)
+- [x] Contract reference doc (`SWAG1155_CONTRACT_REFERENCE.md`) updated with full SwagFactory section
+
+### Pending — frontend app implementation
+
+**FaucetManager UI:**
+- [ ] Update vault creation form: add `zkPassportRequired` (checkbox) + `allowedToken` (address input)
+- [ ] Add "Update Gating" button on existing vaults → `updateVaultGating(vaultId, bool, address)`
+- [ ] Display specific rejection reasons from `canUserClaim` ("Must own ZKPassport NFT", "Must hold required token")
+
+**Swag Store UI:**
+- [ ] Use `SwagFactory.getActiveCollections()` to enumerate products — **no hardcoded Swag1155 address**
+- [ ] Load product name/SKU from `SwagFactory.getCollectionMeta(addr)`
+- [ ] Load sizes from `Swag1155.listTokenIds()` per collection
+- [ ] On wallet connect: call `getDiscountedPrice(tokenId, userAddress)` per product
+- [ ] Show strikethrough base price + green discounted price when discount applies
+- [ ] Show "FREE" badge and skip USDC approval when finalPrice = 0
+- [ ] Use discounted total for `approve()` amount (not base price)
+- [ ] Subscribe to `SerialMinted(buyer, tokenId, serial)` for live inventory and order receipts
+
+**Swag Admin UI (per product — operates on a specific Swag1155 address):**
+- [ ] `deployCollection` form: name, SKU, payment token, treasury, item admin, sizes table
+- [ ] Collection list: read `getActiveCollections()` + `getCollectionMeta()`, with `setCollectionActive` toggle
+- [ ] Royalty management: `addRoyalty`, `clearRoyalties`, `getRoyalties` per tokenId
+- [ ] POAP discount: `addPoapDiscount`, `removePoapDiscount`, `getPoapDiscounts` per tokenId
+- [ ] POAP whitelist: upload attendee list → `addPoapWhitelist(tokenId, eventId, addresses[])` (batch ~200/tx)
+- [ ] Holder discount: `addHolderDiscount`, `removeHolderDiscount`, `getHolderDiscounts` per tokenId
+- [ ] Redemption queue: list `PendingFulfillment` statuses → `markFulfilled(tokenId, owner)`
+
+**General:**
+- [ ] Network switcher supporting Base, Unichain, Optimism (Ethereum has no SwagFactory yet)
+- [ ] Load correct USDC address per chain from network table in Section 6
 
 ---
 
@@ -572,7 +636,7 @@ await swag1155.buy(tokenId, quantity);
 
 ---
 
-## 9. SwagFactory (NEW CONTRACT)
+## 9. SwagFactory — Deployment Pattern ✅
 
 A plain `AccessControl` factory (no proxy) that deploys one `Swag1155` per product item.
 Each item has its own contract address; sizes/variants are `tokenId`s (1-indexed) within it.
@@ -581,13 +645,15 @@ The registry is rebuildable from `CollectionDeployed` events if a new factory is
 ABI location: `frontend/abis/SwagFactory.json`
 Address: see `frontend/addresses.json` → `SwagFactory`
 
+**This is the only way to create swag products. Standalone `Swag1155` deployments are no longer used.**
+
 ### Deployment pattern
 
 | Step | Who | What |
 |------|-----|------|
-| 1 | Deploy team | `deploy-all.ts` deploys SwagFactory directly (`new SwagFactory(admin)`) |
-| 2 | Factory admin | Call `deployCollection(...)` per item — atomically deploys & configures Swag1155 |
-| 3 | Item admin | Interact with the returned Swag1155 directly |
+| 1 | Deploy team | `scripts/deploy-all.ts` deploys **ZKPassportNFT + FaucetManager + SwagFactory** (no Swag1155) |
+| 2 | Factory admin | `scripts/deploy-collection.ts` calls `deployCollection(...)` — deploys & configures one Swag1155 per product |
+| 3 | Item admin | Interact with the returned Swag1155 directly to add royalties, discounts, whitelist, etc. |
 
 ### `deployCollection`
 

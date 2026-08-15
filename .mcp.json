@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "blockscout": {
+      "type": "http",
+      "url": "https://mcp.blockscout.com/mcp"
+    },
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/"
+    },
+    "foundry": {
+      "type": "http",
+      "url": "https://www.getfoundry.sh/api/mcp"
+    }
+  }
+}

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it, before } from "node:test";
 import { network } from "hardhat";
 import { parseEther } from "viem";
+import { deployZKPassport, mintPassport } from "./helpers/zkpassport.js";
 
 describe("FaucetVault", async function () {
   const { viem } = await network.connect();
@@ -9,6 +10,7 @@ describe("FaucetVault", async function () {
 
   let faucetVault: any;
   let nftContract: any;
+  let mockVerifier: any;
   let deployerAddress: string;
   let userAddress: string;
   let claimAmount: bigint;
@@ -18,12 +20,11 @@ describe("FaucetVault", async function () {
     userAddress = user.account.address;
     claimAmount = parseEther("0.01");
 
-    // Deploy NFT contract with deployer as initial owner
-    nftContract = await viem.deployContract("ZKPassportNFT", [
-      "ZKPassport",
-      "ZKP",
-      deployerAddress, // initialOwner
-    ]);
+    // Deploy NFT contract (wired to a mock verifier) with deployer as initial owner
+    ({ nft: nftContract, verifier: mockVerifier } = await deployZKPassport(
+      viem,
+      deployerAddress as `0x${string}`
+    ));
 
     // Deploy FaucetVault
     faucetVault = await viem.deployContract("FaucetVault", [
@@ -31,14 +32,8 @@ describe("FaucetVault", async function () {
       claimAmount,
     ]);
 
-    // Mint NFT to user for testing (approval + user mint)
-    await nftContract.write.approveVerification([
-      "test-user-1",
-      userAddress,
-      true,
-      true,
-    ]);
-    await nftContract.write.mint(["test-user-1"], { account: user.account });
+    // Mint NFT to user for testing
+    await mintPassport(viem, nftContract, mockVerifier, user.account, "faucetvault-user");
   });
 
   it("Should deploy with correct initial values", async function () {
@@ -94,13 +89,7 @@ describe("FaucetVault", async function () {
     await faucetVault.write.withdraw([balance]);
 
     // Mint NFT to another user
-    await nftContract.write.approveVerification([
-      "test-user-2",
-      anotherUser.account.address,
-      true,
-      true,
-    ]);
-    await nftContract.write.mint(["test-user-2"], { account: anotherUser.account });
+    await mintPassport(viem, nftContract, mockVerifier, anotherUser.account, "faucetvault-user-2");
 
     try {
       await faucetVault.write.claim({ account: anotherUser.account });
@@ -164,14 +153,7 @@ describe("FaucetVault", async function () {
 
     // Try to claim while paused
     // First, mint NFT to a new user and deposit funds
-    const pausedUser = nonHolder.account.address;
-    await nftContract.write.approveVerification([
-      "test-user-paused",
-      pausedUser,
-      true,
-      true,
-    ]);
-    await nftContract.write.mint(["test-user-paused"], { account: nonHolder.account });
+    await mintPassport(viem, nftContract, mockVerifier, nonHolder.account, "faucetvault-user-paused");
     await faucetVault.write.deposit({ value: claimAmount });
 
     try {
@@ -188,11 +170,7 @@ describe("FaucetVault", async function () {
 
   it("Should allow owner to update NFT contract", async function () {
     // Deploy new NFT contract
-    const newNFT = await viem.deployContract("ZKPassportNFT", [
-      "ZKPassport",
-      "ZKP",
-      deployerAddress, // initialOwner
-    ]);
+    const { nft: newNFT } = await deployZKPassport(viem, deployerAddress as `0x${string}`);
 
     await faucetVault.write.setNFTContract([newNFT.address]);
     const nftAddr = await faucetVault.read.nftContract();
