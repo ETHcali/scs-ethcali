@@ -56,35 +56,93 @@ interface CurrencyPlan {
   tiers: { min: string; receiptTokenId: number }[];
 }
 
-const CELO_CURRENCIES: CurrencyPlan[] = [
-  {
-    symbol: "COPm",
-    address: "0x8a567e2ae79ca692bd748ab832081c45de4041ea",
-    decimals: 18,
-    tiers: [
-      { min: "40000", receiptTokenId: 1 },   // ~USD 10
-      { min: "400000", receiptTokenId: 2 },  // ~USD 100
-    ],
-  },
-  {
-    symbol: "USDC",
-    address: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C",
-    decimals: 6,
-    tiers: [
-      { min: "10", receiptTokenId: 1 },
-      { min: "100", receiptTokenId: 2 },
-    ],
-  },
-  {
-    symbol: "CELO",
-    address: ETH_TOKEN,
-    decimals: 18,
-    tiers: [
-      { min: "10", receiptTokenId: 1 },
-      { min: "100", receiptTokenId: 2 },
-    ],
-  },
-];
+/**
+ * Per-chain currency plans.
+ *
+ * Tier floors are chosen by VALUE, not by decimal count. CELO and ETH are both
+ * 18 decimals but differ by ~4 orders of magnitude in price, so "10" means
+ * roughly USD 5 on Celo and roughly USD 40,000 on Ethereum. Getting this wrong
+ * does not revert — it silently sets a tier nobody can ever reach.
+ */
+const CURRENCIES_BY_CHAIN: Record<number, CurrencyPlan[]> = {
+  // ── Celo (42220) — COPm is the point of this chain ───────────────────────
+  42220: [
+    {
+      symbol: "COPm",
+      address: "0x8a567e2ae79ca692bd748ab832081c45de4041ea",
+      decimals: 18,
+      tiers: [
+        { min: "40000", receiptTokenId: 1 },   // ~USD 10
+        { min: "400000", receiptTokenId: 2 },  // ~USD 100
+      ],
+    },
+    {
+      symbol: "USDC",
+      address: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C",
+      decimals: 6,
+      tiers: [
+        { min: "10", receiptTokenId: 1 },
+        { min: "100", receiptTokenId: 2 },
+      ],
+    },
+    {
+      symbol: "CELO",
+      address: ETH_TOKEN,
+      decimals: 18,
+      tiers: [
+        { min: "10", receiptTokenId: 1 },
+        { min: "100", receiptTokenId: 2 },
+      ],
+    },
+  ],
+
+  // ── Optimism (10) ────────────────────────────────────────────────────────
+  10: [
+    {
+      // NATIVE Circle USDC, not the bridged USDC.e at 0x7F5c764c…. Both report
+      // symbol "USDC" with 6 decimals, so symbol() alone cannot tell them
+      // apart — the address is the only thing that distinguishes them.
+      symbol: "USDC",
+      address: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+      decimals: 6,
+      tiers: [
+        { min: "10", receiptTokenId: 1 },
+        { min: "100", receiptTokenId: 2 },
+      ],
+    },
+    {
+      symbol: "ETH",
+      address: ETH_TOKEN,
+      decimals: 18,
+      tiers: [
+        { min: "0.0025", receiptTokenId: 1 }, // ~USD 10
+        { min: "0.025", receiptTokenId: 2 },  // ~USD 100
+      ],
+    },
+  ],
+
+  // ── Ethereum (1) ─────────────────────────────────────────────────────────
+  1: [
+    {
+      symbol: "USDC",
+      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      decimals: 6,
+      tiers: [
+        { min: "10", receiptTokenId: 1 },
+        { min: "100", receiptTokenId: 2 },
+      ],
+    },
+    {
+      symbol: "ETH",
+      address: ETH_TOKEN,
+      decimals: 18,
+      tiers: [
+        { min: "0.0025", receiptTokenId: 1 },
+        { min: "0.025", receiptTokenId: 2 },
+      ],
+    },
+  ],
+};
 
 const RECEIPT_TIERS = [
   { tokenId: 1, name: "Supporter", uri: process.env.RECEIPT_URI_1 || "" },
@@ -117,6 +175,14 @@ async function main() {
     process.env.CAMPAIGN_DESCRIPTION ||
     "Direct relief for Cali. Funds settle onchain to the ethcali.eth Safe.";
   const autoForward = (process.env.AUTO_FORWARD ?? "1") === "1";
+
+  const currencies = CURRENCIES_BY_CHAIN[chainId];
+  if (!currencies) {
+    throw new Error(
+      `No currency plan for chain ${chainId} (${networkName}). ` +
+        `Add one to CURRENCIES_BY_CHAIN before seeding here.`
+    );
+  }
 
   const vault = await viem.getContractAt("DonationVault", vaultAddress);
   const receipt = await viem.getContractAt("DonationReceipt1155", receiptAddress);
@@ -222,7 +288,7 @@ async function main() {
 
   // ── 3. Accepted currencies + per-token tiers ─────────────────────────────
   console.log("\n3. Currencies");
-  for (const cur of CELO_CURRENCIES) {
+  for (const cur of currencies) {
     // Verify the token really is what we think before accepting it. A docs-listed
     // "USDC on Celo" once turned out to be a fee-currency adapter.
     if (cur.address !== ETH_TOKEN) {
@@ -291,10 +357,10 @@ async function main() {
     console.log(`  Done. ${sent} transaction(s) sent. Campaign #${campaignId} is live.`);
     const [allowed, reason] = await vault.read.canDonate([
       campaignId,
-      CELO_CURRENCIES[0].address,
-      parseUnits("40000", 18),
+      currencies[0].address,
+      parseUnits(currencies[0].tiers[0].min, currencies[0].decimals),
     ]);
-    console.log(`  canDonate(40000 COPm): ${allowed}${allowed ? "" : ` — ${reason}`}`);
+    console.log(`  canDonate(${currencies[0].tiers[0].min} ${currencies[0].symbol}): ${allowed}${allowed ? "" : ` — ${reason}`}`);
   }
   console.log("═══════════════════════════════════════════════════════════");
 }
