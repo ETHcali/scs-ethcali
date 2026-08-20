@@ -65,7 +65,10 @@ function tokensForChain(networkName: string): Record<string, { address: string; 
 interface CatalogueVariant {
   label: string;
   metadataURI: string;
-  maxSupply: number;
+  /** Units sellable on-chain via buy(). */
+  onchainCap: number;
+  /** Units reserved for Shopify vouchers. Set Shopify inventory to this. */
+  voucherCap: number;
   active: boolean;
   prices: Record<string, string>;
 }
@@ -190,7 +193,8 @@ async function main() {
 
       return {
         metadataURI: variant.metadataURI,
-        maxSupply: BigInt(variant.maxSupply),
+        onchainCap: BigInt(variant.onchainCap),
+        voucherCap: BigInt(variant.voucherCap),
         active: variant.active,
         payments,
       };
@@ -203,7 +207,10 @@ async function main() {
         .filter(([s]) => tokens[s])
         .map(([s, p]) => `${p} ${s}`)
         .join(", ");
-      console.log(`   tokenId ${i + 1}  ${v.label.padEnd(10)} supply ${String(v.maxSupply).padEnd(5)} ${priced}`);
+      console.log(
+        `   tokenId ${i + 1}  ${v.label.padEnd(10)} ` +
+          `onchain ${String(v.onchainCap).padEnd(4)} shopify ${String(v.voucherCap).padEnd(4)} ${priced}`
+      );
     }
 
     if (dryRun) {

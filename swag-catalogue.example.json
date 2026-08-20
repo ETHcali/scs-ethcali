@@ -10,6 +10,13 @@
     "Never write base units here — that is exactly how a 10^12 pricing error",
     "gets made.",
     "",
+    "SUPPLY IS SPLIT ACROSS TWO SALES CHANNELS:",
+    "  onchainCap  units sellable here via buy(), paid in crypto",
+    "  voucherCap  units reserved for Shopify, claimed with a signed voucher",
+    "Set the Shopify product's inventory to exactly voucherCap. The two counters",
+    "are separate on purpose — one shared cap would let a Shopify checkout and an",
+    "on-chain buy() both see the last unit and oversell a physical item.",
+    "",
     "Token keys are resolved per chain from config: USDC, COPm (Celo only),",
     "and ETH for the chain's native token. A token missing on the target chain",
     "is skipped with a warning rather than failing the whole seed.",
@@ -18,7 +25,6 @@
     "SKU must be unique — the seeder uses it to skip products already deployed,",
     "so re-running is safe."
   ],
-
   "products": [
     {
       "name": "ETH Cali Hoodie",
@@ -28,30 +34,46 @@
         {
           "label": "S",
           "metadataURI": "ipfs://REPLACE_WITH_CID/hoodie-s.json",
-          "maxSupply": 25,
+          "onchainCap": 6,
+          "voucherCap": 19,
           "active": true,
-          "prices": { "USDC": "45", "ETH": "0.018" }
+          "prices": {
+            "USDC": "45",
+            "ETH": "0.018"
+          }
         },
         {
           "label": "M",
           "metadataURI": "ipfs://REPLACE_WITH_CID/hoodie-m.json",
-          "maxSupply": 40,
+          "onchainCap": 10,
+          "voucherCap": 30,
           "active": true,
-          "prices": { "USDC": "45", "ETH": "0.018" }
+          "prices": {
+            "USDC": "45",
+            "ETH": "0.018"
+          }
         },
         {
           "label": "L",
           "metadataURI": "ipfs://REPLACE_WITH_CID/hoodie-l.json",
-          "maxSupply": 40,
+          "onchainCap": 10,
+          "voucherCap": 30,
           "active": true,
-          "prices": { "USDC": "45", "ETH": "0.018" }
+          "prices": {
+            "USDC": "45",
+            "ETH": "0.018"
+          }
         },
         {
           "label": "XL",
           "metadataURI": "ipfs://REPLACE_WITH_CID/hoodie-xl.json",
-          "maxSupply": 20,
+          "onchainCap": 5,
+          "voucherCap": 15,
           "active": true,
-          "prices": { "USDC": "45", "ETH": "0.018" }
+          "prices": {
+            "USDC": "45",
+            "ETH": "0.018"
+          }
         }
       ]
     },
@@ -63,23 +85,35 @@
         {
           "label": "S",
           "metadataURI": "ipfs://REPLACE_WITH_CID/tee-s.json",
-          "maxSupply": 50,
+          "onchainCap": 12,
+          "voucherCap": 38,
           "active": true,
-          "prices": { "USDC": "22", "ETH": "0.009" }
+          "prices": {
+            "USDC": "22",
+            "ETH": "0.009"
+          }
         },
         {
           "label": "M",
           "metadataURI": "ipfs://REPLACE_WITH_CID/tee-m.json",
-          "maxSupply": 75,
+          "onchainCap": 18,
+          "voucherCap": 57,
           "active": true,
-          "prices": { "USDC": "22", "ETH": "0.009" }
+          "prices": {
+            "USDC": "22",
+            "ETH": "0.009"
+          }
         },
         {
           "label": "L",
           "metadataURI": "ipfs://REPLACE_WITH_CID/tee-l.json",
-          "maxSupply": 75,
+          "onchainCap": 18,
+          "voucherCap": 57,
           "active": true,
-          "prices": { "USDC": "22", "ETH": "0.009" }
+          "prices": {
+            "USDC": "22",
+            "ETH": "0.009"
+          }
         }
       ]
     },
@@ -91,9 +125,13 @@
         {
           "label": "One size",
           "metadataURI": "ipfs://REPLACE_WITH_CID/cap.json",
-          "maxSupply": 100,
+          "onchainCap": 25,
+          "voucherCap": 75,
           "active": true,
-          "prices": { "USDC": "28", "ETH": "0.011" }
+          "prices": {
+            "USDC": "28",
+            "ETH": "0.011"
+          }
         }
       ]
     }
