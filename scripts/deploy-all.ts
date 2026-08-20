@@ -199,13 +199,12 @@ async function main() {
     process.env.NFT_DESCRIPTION
   ) {
     console.log(`   Setting NFT metadata...`);
-    await zkPassportNFT.write.setMetadata([
+    await send("set ZKPassport metadata", () => zkPassportNFT.write.setMetadata([
       process.env.NFT_IMAGE_URI,
       process.env.NFT_DESCRIPTION,
       process.env.NFT_EXTERNAL_URL || "",
       true,
-    ]);
-    console.log(`   ✅ Metadata configured`);
+    ]));
   }
 
   // Deploy FaucetManager
@@ -267,6 +266,19 @@ async function main() {
   // cannot sign anything there. A plain EOA works on every chain.
   const deployerAddress = deployer.account.address as `0x${string}`;
 
+  /**
+   * Send a write and WAIT for it to be mined. Consecutive writes that do not
+   * wait estimate gas against stale state and can race on nonce — exactly how
+   * the first Celo deploy failed partway through role setup.
+   */
+  const send = async (label: string, fn: () => Promise<`0x${string}`>) => {
+    process.stdout.write(`   ${label} … `);
+    const hash = await fn();
+    const rcpt = await publicClient.waitForTransactionReceipt({ hash });
+    console.log(rcpt.status === "success" ? "ok" : "FAILED");
+    if (rcpt.status !== "success") throw new Error(`${label} reverted (${hash})`);
+  };
+
   console.log("\n📦 Deploying DonationReceipt1155...");
   const donationReceipt = await viem.deployContract("DonationReceipt1155", [
     process.env.DONATION_RECEIPT_NAME || "ETH Cali Relief Receipts",
@@ -285,8 +297,9 @@ async function main() {
   // The vault must hold MINTER_ROLE or every qualifying donation silently
   // emits ReceiptFailed and the donor gets no NFT. Deployer is the receipt
   // admin at this point, so this always succeeds.
-  await donationReceipt.write.addMinter([donationVaultAddress as `0x${string}`]);
-  console.log(`   ✅ DonationVault granted MINTER_ROLE on DonationReceipt1155`);
+  await send("grant vault MINTER_ROLE", () =>
+    donationReceipt.write.addMinter([donationVaultAddress as `0x${string}`])
+  );
 
   // ── Grant ADMIN_ROLE to the operator accounts ───────────────────────────
   const opsAdmins = config.donationOpsAdmins.length
@@ -295,9 +308,12 @@ async function main() {
 
   for (const admin of opsAdmins) {
     if (admin.toLowerCase() === deployerAddress.toLowerCase()) continue;
-    await donationVault.write.addAdmin([admin as `0x${string}`]);
-    await donationReceipt.write.addAdmin([admin as `0x${string}`]);
-    console.log(`   ✅ ADMIN_ROLE granted to ${admin}`);
+    await send(`grant vault ADMIN_ROLE to ${admin}`, () =>
+      donationVault.write.addAdmin([admin as `0x${string}`])
+    );
+    await send(`grant receipt ADMIN_ROLE to ${admin}`, () =>
+      donationReceipt.write.addAdmin([admin as `0x${string}`])
+    );
   }
 
   // ── Hand custody to the multisig, then step down ────────────────────────
@@ -321,14 +337,31 @@ async function main() {
     } else {
       const DEFAULT_ADMIN_ROLE = ("0x" + "00".repeat(32)) as `0x${string}`;
 
-      await donationVault.write.grantRole([DEFAULT_ADMIN_ROLE, custodyAdmin as `0x${string}`]);
-      await donationReceipt.write.grantRole([DEFAULT_ADMIN_ROLE, custodyAdmin as `0x${string}`]);
-      console.log(`   ✅ DEFAULT_ADMIN_ROLE granted to ${custodyAdmin}`);
+      await send("grant vault DEFAULT_ADMIN to multisig", () =>
+        donationVault.write.grantRole([DEFAULT_ADMIN_ROLE, custodyAdmin as `0x${string}`])
+      );
+      await send("grant receipt DEFAULT_ADMIN to multisig", () =>
+        donationReceipt.write.grantRole([DEFAULT_ADMIN_ROLE, custodyAdmin as `0x${string}`])
+      );
 
-      // Deployer renounces custody but keeps ADMIN_ROLE for operations.
-      await donationVault.write.renounceRole([DEFAULT_ADMIN_ROLE, deployerAddress]);
-      await donationReceipt.write.renounceRole([DEFAULT_ADMIN_ROLE, deployerAddress]);
-      console.log(`   ✅ Deployer renounced DEFAULT_ADMIN_ROLE — custody is now the multisig`);
+      // Renounce ONLY after confirming the multisig holds both roles —
+      // renouncing first would lock custody out permanently.
+      const msHasVault = await donationVault.read.isSuperAdmin([custodyAdmin as `0x${string}`]);
+      const msHasReceipt = await donationReceipt.read.hasRole([
+        DEFAULT_ADMIN_ROLE,
+        custodyAdmin as `0x${string}`,
+      ]);
+
+      if (msHasVault && msHasReceipt) {
+        await send("deployer renounce vault DEFAULT_ADMIN", () =>
+          donationVault.write.renounceRole([DEFAULT_ADMIN_ROLE, deployerAddress])
+        );
+        await send("deployer renounce receipt DEFAULT_ADMIN", () =>
+          donationReceipt.write.renounceRole([DEFAULT_ADMIN_ROLE, deployerAddress])
+        );
+      } else {
+        console.log("   ⚠️  multisig missing a role — NOT renouncing deployer custody");
+      }
     }
   } else {
     console.log(

@@ -1,6 +1,7 @@
 # ETHcali Smart Contracts
 
-Identity, faucet, and merchandise contracts for the ETHcali ecosystem on Base, Ethereum, Unichain, and Optimism.
+Identity, faucet, merchandise, hackathon staking, and donation contracts for the ETHcali
+ecosystem on Base, Ethereum, Unichain, Optimism, and Celo.
 
 ## Contracts
 
@@ -10,6 +11,9 @@ Identity, faucet, and merchandise contracts for the ETHcali ecosystem on Base, E
 | **FaucetManager** | Multi-vault ETH faucet with ZKPassport & ERC-20/ERC-721 token gating |
 | **Swag1155** | ERC-1155 merchandise store — USDC payments, royalties, POAP/holder discounts, serial numbers |
 | **SwagFactory** | Deploys one `Swag1155` per product; maintains a registry of all collections |
+| **HackathonStaking** | Commitment bonds for hackathons — stake to register, reclaim on submission, no-show bonds sweep to a prize pool |
+| **DonationVault** | Multi-campaign donation vault — any currency per campaign, on-chain donor attribution, beneficiary-locked withdrawals |
+| **DonationReceipt1155** | Admin-configurable, soulbound-by-default ERC-1155 receipts issued to donors by tier |
 
 ## Setup
 
