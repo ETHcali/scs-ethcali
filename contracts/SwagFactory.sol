@@ -43,10 +43,16 @@ contract SwagFactory is AccessControl {
         bool    active;       // Factory-level toggle (does not affect the Swag1155 itself)
     }
 
-    /// @notice Input descriptor for one size variant supplied to deployCollection.
+    /**
+     * @notice Input descriptor for one size variant supplied to deployCollection.
+     * @dev Supply is split across the two sales channels at creation time.
+     *      Set the Shopify product's inventory to `voucherCap` so the two
+     *      channels can never contend for the same physical item.
+     */
     struct VariantInit {
         string          metadataURI; // Full IPFS URI for this size's metadata
-        uint256         maxSupply;   // Maximum inventory for this size
+        uint128         onchainCap;  // Units sellable on-chain via buy()
+        uint128         voucherCap;  // Units reserved for Shopify vouchers
         bool            active;      // Whether this size is purchasable at launch
         PaymentOption[] payments;    // One entry per accepted payment token + price
     }
@@ -138,7 +144,8 @@ contract SwagFactory is AccessControl {
 
         // 1. Clone Swag1155 implementation (EIP-1167 minimal proxy) and initialize it.
         //    Factory is initialAdmin so it can configure variants, then transfers control.
-        Swag1155 swag = Swag1155(implementation.clone());
+        // payable cast: Swag1155 has a receive() that rejects bare ETH.
+        Swag1155 swag = Swag1155(payable(implementation.clone()));
         swag.initialize(
             sizes[0].metadataURI, // baseURI (each tokenId overrides with its own URI)
             treasury,
@@ -150,7 +157,8 @@ contract SwagFactory is AccessControl {
             uint256 tokenId = i + 1;
             swag.setVariantWithURI(
                 tokenId,
-                sizes[i].maxSupply,
+                sizes[i].onchainCap,
+                sizes[i].voucherCap,
                 sizes[i].active,
                 sizes[i].metadataURI
             );

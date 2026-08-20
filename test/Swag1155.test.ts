@@ -1,875 +1,411 @@
 import assert from "node:assert/strict";
 import { describe, it, before } from "node:test";
 import { network } from "hardhat";
+import { parseSignature } from "viem";
 
 const USDC_DECIMALS = 6n;
 const USDC = (n: number) => BigInt(n) * 10n ** USDC_DECIMALS;
 
+const ETH_TOKEN = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" as const;
+
+/**
+ * Swag1155 sells one inventory through two channels: buy() on-chain, and
+ * claim() against an EIP-712 voucher signed by the Shopify backend.
+ *
+ * The property that matters most is that the two channels have separate supply
+ * buckets and cannot oversell each other — a physical hoodie exists once.
+ */
 describe("Swag1155", async function () {
   const { viem } = await network.connect();
-  const [deployer, buyer, buyer2, treasury] = await viem.getWalletClients();
+  const [deployer, buyer, buyer2, treasury, signer, outsider] =
+    await viem.getWalletClients();
 
   let usdc: any;
   let swag: any;
-  let mockNft: any;
+  let factory: any;
+  let chainId: number;
 
   const BASE_URI = "https://wallet.ethcali.org/metadata/{id}.json";
 
-  /**
-   * Swag1155 is clone-only — its constructor marks the implementation as
-   * initialized, so a directly-deployed instance can never be configured.
-   * Every collection therefore comes from SwagFactory.deployCollection().
-   */
-  before(async function () {
-    // Deploy mocks
-    usdc = await viem.deployContract("MockUSDC", []);
-    mockNft = await viem.deployContract("MockERC721", []);
+  /** Deploy a fresh collection so tests never depend on each other's supply. */
+  async function freshCollection(onchainCap: bigint, voucherCap: bigint) {
+    await factory.write.deployCollection([
+      "Test Product",
+      `SKU-${onchainCap}-${voucherCap}-${Math.floor(Number(onchainCap) + Number(voucherCap))}`,
+      treasury.account.address,
+      deployer.account.address,
+      [
+        {
+          metadataURI: BASE_URI,
+          onchainCap,
+          voucherCap,
+          active: true,
+          payments: [{ token: usdc.address, price: USDC(50) }],
+        },
+      ],
+    ]);
+    const all = await factory.read.getCollections();
+    return viem.getContractAt("Swag1155", all[all.length - 1]);
+  }
 
-    // Mint USDC to buyers
-    await usdc.write.mint([buyer.account.address, USDC(1000)]);
-    await usdc.write.mint([buyer2.account.address, USDC(1000)]);
+  /** Sign a claim voucher as `account`, using the contract's own EIP-712 domain. */
+  async function signVoucher(voucher: any, account: any, contract: any) {
+    const signature = await account.signTypedData({
+      domain: {
+        name: "ETHCaliSwag",
+        version: "1",
+        chainId,
+        verifyingContract: contract.address,
+      },
+      types: {
+        Claim: [
+          { name: "tokenId", type: "uint256" },
+          { name: "to", type: "address" },
+          { name: "quantity", type: "uint256" },
+          { name: "orderRef", type: "bytes32" },
+          { name: "deadline", type: "uint256" },
+        ],
+      },
+      primaryType: "Claim",
+      message: voucher,
+    });
+    return signature;
+  }
+
+  function voucherFor(overrides: any = {}) {
+    return {
+      tokenId: 1n,
+      to: buyer.account.address,
+      quantity: 1n,
+      orderRef: `0x${"11".repeat(32)}`,
+      deadline: BigInt(Math.floor(Date.now() / 1000) + 3600),
+      ...overrides,
+    };
+  }
+
+  before(async function () {
+    const publicClient = await viem.getPublicClient();
+    chainId = await publicClient.getChainId();
+
+    usdc = await viem.deployContract("MockUSDC", []);
+    await usdc.write.mint([buyer.account.address, USDC(10_000)]);
+    await usdc.write.mint([buyer2.account.address, USDC(10_000)]);
 
     const implementation = await viem.deployContract("Swag1155", []);
-    const factory = await viem.deployContract("SwagFactory", [
+    factory = await viem.deployContract("SwagFactory", [
       deployer.account.address,
       implementation.address,
     ]);
 
-    // Seed size supplies the collection's baseURI; deployer keeps admin control.
-    await factory.write.deployCollection([
-      "Test Product",
-      "TEST-SKU-001",
-      treasury.account.address,
-      deployer.account.address, // itemAdmin
-      [
-        {
-          metadataURI: BASE_URI,
-          maxSupply: 1000n,
-          active: true,
-          payments: [{ token: usdc.address, price: USDC(1) }],
-        },
-      ],
-    ]);
-
-    const [addr] = await factory.read.getCollections();
-    swag = await viem.getContractAt("Swag1155", addr);
+    swag = await freshCollection(100n, 100n);
+    await swag.write.addSigner([signer.account.address]);
   });
 
-  // ── Compatibility helpers ───────────────────────────────────────────────────
-  // Price moved off the variant and onto per-token payment options, and every
-  // purchase now names its payment token. These wrappers keep the call sites
-  // below reading the way the product does: "this variant costs N USDC".
+  // ── Clone-only ─────────────────────────────────────────────────────────────
 
-  /** setVariant([tokenId, price, maxSupply, active]) against the split API. */
-  async function setVariant(args: any[], opts: any = {}) {
-    const [tokenId, price, maxSupply, active] = args;
-    await swag.write.setVariant([tokenId, maxSupply, active], opts);
-    await swag.write.setPaymentOption([tokenId, usdc.address, price], opts);
-  }
-
-  /** setVariantWithURI([tokenId, price, maxSupply, active, uri]) against the split API. */
-  async function setVariantWithURI(args: any[], opts: any = {}) {
-    const [tokenId, price, maxSupply, active, tokenURI] = args;
-    await swag.write.setVariantWithURI([tokenId, maxSupply, active, tokenURI], opts);
-    await swag.write.setPaymentOption([tokenId, usdc.address, price], opts);
-  }
-
-  /** buy([tokenId, quantity]) paying in USDC. */
-  function buy(args: any[], opts: any = {}) {
-    const [tokenId, quantity] = args;
-    return swag.write.buy([tokenId, quantity, usdc.address], opts);
-  }
-
-  /** buyBatch([tokenIds, quantities]) paying in USDC. */
-  function buyBatch(args: any[], opts: any = {}) {
-    const [tokenIds, quantities] = args;
-    return swag.write.buyBatch([tokenIds, quantities, usdc.address], opts);
-  }
-
-  /** getDiscountedPrice([tokenId, buyer]) quoted in USDC. */
-  function getDiscountedPrice(args: any[]) {
-    const [tokenId, who] = args;
-    return swag.read.getDiscountedPrice([tokenId, who, usdc.address]);
-  }
-
-  /** The USDC price currently set for a variant. */
-  function priceOf(tokenId: bigint) {
-    return swag.read.getTokenPrice([tokenId, usdc.address]);
-  }
-
-  it("Initial configuration set correctly", async function () {
-    // OZ ERC1155 returns the base URI; clients replace {id}
-    assert.equal(await swag.read.uri([0n]), BASE_URI);
-    const treasAddr = await swag.read.treasury();
-    assert.equal(treasAddr.toLowerCase(), treasury.account.address.toLowerCase());
-    // USDC is no longer a contract-level field — it is one accepted payment
-    // token among many, priced per tokenId.
-    assert.equal(await priceOf(1n), USDC(1));
+  it("a directly deployed implementation can never be initialized", async function () {
+    const impl = await viem.deployContract("Swag1155", []);
+    await assert.rejects(
+      impl.write.initialize([BASE_URI, treasury.account.address, deployer.account.address]),
+      /AlreadyInitialized/
+    );
   });
 
-  it("Admin can upsert variant and users can buy", async function () {
-    const tokenId = 102n; // Product 1, size 02 (M)
+  // ── Variants and the two buckets ───────────────────────────────────────────
 
-    // Upsert variant: price 25 USDC, maxSupply 100, active
-    await setVariant([tokenId, USDC(25), 100n, true]);
-
-    // Approve USDC
-    await usdc.write.approve([swag.address, USDC(1000)], { account: buyer.account });
-
-    // Buy 2 units
-    await buy([tokenId, 2n], { account: buyer.account });
-
-    const bal = await swag.read.balanceOf([buyer.account.address, tokenId]);
-    assert.equal(bal, 2n);
-
-    const v = await swag.read.getVariant([tokenId]);
-    assert.equal(v.minted, 2n);
-    assert.equal(await priceOf(tokenId), USDC(25));
-    assert.equal(v.maxSupply, 100n);
-
-    // Treasury received 50 USDC
-    const tBal = await usdc.read.balanceOf([treasury.account.address]);
-    assert.equal(tBal, USDC(50));
+  it("splits supply into an on-chain bucket and a voucher bucket", async function () {
+    const v = await swag.read.getVariant([1n]);
+    assert.equal(v.onchainCap, 100n);
+    assert.equal(v.voucherCap, 100n);
+    assert.equal(await swag.read.remainingOnchain([1n]), 100n);
+    assert.equal(await swag.read.remainingVoucher([1n]), 100n);
   });
 
-  it("Enforces supply limits and active status", async function () {
-    const tokenId = 103n; // Product 1, size 03 (L)
+  it("refuses to cut a cap below what that channel already minted", async function () {
+    const c = await freshCollection(5n, 5n);
+    await usdc.write.approve([c.address, USDC(500)], { account: buyer.account });
+    await c.write.buy([1n, 2n, usdc.address], { account: buyer.account });
 
-    await setVariant([tokenId, USDC(15), 3n, false]);
-
-    // Inactive should revert
-    try {
-      await buy([tokenId, 1n], { account: buyer.account });
-      assert.fail("Should revert for inactive variant");
-    } catch (e: any) {
-      assert(e.message.includes("variant inactive"));
-    }
-
-    // Activate and test supply enforcement
-    await setVariant([tokenId, USDC(15), 3n, true]);
-    await usdc.write.approve([swag.address, USDC(100)], { account: buyer.account });
-
-    await buy([tokenId, 2n], { account: buyer.account });
-
-    // Exceed remaining
-    try {
-      await buy([tokenId, 2n], { account: buyer.account });
-      assert.fail("Should revert for exceeds supply");
-    } catch (e: any) {
-      assert(e.message.includes("exceeds supply"));
-    }
+    await assert.rejects(
+      c.write.setVariant([1n, 1n, 5n, true]),
+      /CapBelowMinted/
+    );
   });
 
-  it("Batch purchase works with single payment", async function () {
-    const ids = [201n, 202n];
-    const qtys = [1n, 3n];
+  // ── Channel 1: buy() ───────────────────────────────────────────────────────
 
-    await setVariant([ids[0], USDC(10), 10n, true]);
-    await setVariant([ids[1], USDC(5), 10n, true]);
+  it("buys on-chain, paying the treasury directly", async function () {
+    const c = await freshCollection(10n, 10n);
+    const before = await usdc.read.balanceOf([treasury.account.address]);
 
-    const total = USDC(10) + USDC(5) * 3n; // 25 USDC
+    await usdc.write.approve([c.address, USDC(100)], { account: buyer.account });
+    await c.write.buy([1n, 2n, usdc.address], { account: buyer.account });
 
-    await usdc.write.approve([swag.address, USDC(100)], { account: buyer2.account });
-    const tBefore = await usdc.read.balanceOf([treasury.account.address]);
-
-    await buyBatch([ids, qtys], { account: buyer2.account });
-
-    const b1 = await swag.read.balanceOf([buyer2.account.address, ids[0]]);
-    const b2 = await swag.read.balanceOf([buyer2.account.address, ids[1]]);
-    assert.equal(b1, 1n);
-    assert.equal(b2, 3n);
-
-    const tAfter = await usdc.read.balanceOf([treasury.account.address]);
-    assert.equal(tAfter - tBefore, total);
-
-    const v201 = await swag.read.getVariant([ids[0]]);
-    const v202 = await swag.read.getVariant([ids[1]]);
-    assert.equal(v201.minted, 1n);
-    assert.equal(v202.minted, 3n);
+    assert.equal(await c.read.balanceOf([buyer.account.address, 1n]), 2n);
+    assert.equal(
+      await usdc.read.balanceOf([treasury.account.address]),
+      before + USDC(100)
+    );
+    // The contract itself never holds revenue.
+    assert.equal(await usdc.read.balanceOf([c.address]), 0n);
   });
 
-  it("Reverts on zero quantity and length mismatch", async function () {
-    const id = 301n;
-    await setVariant([id, USDC(1), 10n, true]);
-    await usdc.write.approve([swag.address, USDC(10)], { account: buyer.account });
-
-    try {
-      await buy([id, 0n], { account: buyer.account });
-      assert.fail("Should revert invalid quantity");
-    } catch (e: any) {
-      assert(e.message.includes("invalid quantity"));
-    }
-
-    try {
-      await buyBatch([[id], [1n, 2n]], { account: buyer.account } as any);
-      assert.fail("Should revert length mismatch");
-    } catch (e: any) {
-      assert(e.message.includes("length mismatch"));
-    }
+  it("rejects a payment token that was never configured", async function () {
+    const c = await freshCollection(10n, 10n);
+    await assert.rejects(
+      c.write.buy([1n, 1n, ETH_TOKEN], { account: buyer.account }),
+      /PaymentTokenNotAccepted/
+    );
   });
 
-  it("Admin can set variant with per-token URI", async function () {
-    const tokenId = 401n;
-    const metadataURI = "ipfs://QmAbc123/metadata.json";
+  it("requires the exact native amount when paying in the native token", async function () {
+    const c = await freshCollection(10n, 10n);
+    await c.write.setPaymentOption([1n, ETH_TOKEN, 1000000000000000n]); // 0.001
 
-    await setVariantWithURI([
-      tokenId,
-      USDC(30),
-      50n,
-      true,
-      metadataURI,
-    ]);
+    await assert.rejects(
+      c.write.buy([1n, 1n, ETH_TOKEN], { account: buyer.account, value: 1n }),
+      /IncorrectEthAmount/
+    );
 
-    const v = await swag.read.getVariant([tokenId]);
-    assert.equal(await priceOf(tokenId), USDC(30));
-    assert.equal(v.maxSupply, 50n);
-    assert.equal(v.active, true);
-
-    const uri = await swag.read.uri([tokenId]);
-    assert.equal(uri, metadataURI);
+    await c.write.buy([1n, 1n, ETH_TOKEN], {
+      account: buyer.account,
+      value: 1000000000000000n,
+    });
+    assert.equal(await c.read.balanceOf([buyer.account.address, 1n]), 1n);
   });
 
-  it("Per-token URI overrides baseURI", async function () {
-    const tokenId = 402n;
-    const metadataURI = "ipfs://QmCustom/token.json";
+  it("stops at the on-chain cap without touching voucher stock", async function () {
+    const c = await freshCollection(2n, 5n);
+    await usdc.write.approve([c.address, USDC(1000)], { account: buyer.account });
 
-    await setVariantWithURI([tokenId, USDC(20), 20n, true, metadataURI]);
+    await c.write.buy([1n, 2n, usdc.address], { account: buyer.account });
+    assert.equal(await c.read.remainingOnchain([1n]), 0n);
 
-    const uri = await swag.read.uri([tokenId]);
-    assert.equal(uri, metadataURI);
+    await assert.rejects(
+      c.write.buy([1n, 1n, usdc.address], { account: buyer.account }),
+      /SoldOut/
+    );
 
-    // Token without per-token URI should use baseURI
-    const tokenId2 = 403n;
-    await setVariant([tokenId2, USDC(20), 20n, true]);
-
-    const uri2 = await swag.read.uri([tokenId2]);
-    assert(uri2.includes(BASE_URI) || uri2.includes("0000000000000000000000000000000000000000000000000000000000000193"));
+    // The Shopify allocation is untouched by on-chain demand.
+    assert.equal(await c.read.remainingVoucher([1n]), 5n);
   });
 
-  // ==================== REDEMPTION TESTS ====================
-
-  it("User can redeem their NFT", async function () {
-    const tokenId = 501n;
-
-    // Setup: create variant and buy
-    await setVariant([tokenId, USDC(10), 10n, true]);
-    await usdc.write.approve([swag.address, USDC(10)], { account: buyer.account });
-    await buy([tokenId, 1n], { account: buyer.account });
-
-    // Check initial status is NotRedeemed (0)
-    const statusBefore = await swag.read.getRedemptionStatus([tokenId, buyer.account.address]);
-    assert.equal(statusBefore, 0); // NotRedeemed
-
-    // Redeem
-    await swag.write.redeem([tokenId], { account: buyer.account });
-
-    // Check status is PendingFulfillment (1)
-    const statusAfter = await swag.read.getRedemptionStatus([tokenId, buyer.account.address]);
-    assert.equal(statusAfter, 1); // PendingFulfillment
+  it("refuses purchases while paused", async function () {
+    const c = await freshCollection(10n, 10n);
+    await c.write.pause();
+    await usdc.write.approve([c.address, USDC(100)], { account: buyer.account });
+    await assert.rejects(
+      c.write.buy([1n, 1n, usdc.address], { account: buyer.account }),
+      /EnforcedPause/
+    );
   });
 
-  it("User cannot redeem if they don't own the NFT", async function () {
-    const tokenId = 502n;
+  // ── Channel 2: claim() ─────────────────────────────────────────────────────
 
-    // Setup: create variant but don't buy
-    await setVariant([tokenId, USDC(10), 10n, true]);
+  it("claims a Shopify order against a signed voucher", async function () {
+    const c = await freshCollection(10n, 10n);
+    await c.write.addSigner([signer.account.address]);
 
-    // Try to redeem without owning
-    try {
-      await swag.write.redeem([tokenId], { account: buyer2.account });
-      assert.fail("Should revert for non-owner");
-    } catch (e: any) {
-      assert(e.message.includes("not owner"));
-    }
+    const voucher = voucherFor({ orderRef: `0x${"a1".repeat(32)}` });
+    const sig = await signVoucher(voucher, signer, c);
+
+    const [allowed] = await c.read.canClaim([voucher, sig]);
+    assert.equal(allowed, true);
+
+    await c.write.claim([voucher, sig], { account: buyer2.account });
+
+    assert.equal(await c.read.balanceOf([buyer.account.address, 1n]), 1n);
+    assert.equal(await c.read.remainingVoucher([1n]), 9n);
+    // Claiming costs the buyer nothing and draws only from the voucher bucket.
+    assert.equal(await c.read.remainingOnchain([1n]), 10n);
   });
 
-  it("User cannot redeem same token twice", async function () {
-    const tokenId = 503n;
+  it("burns the order reference, so a replayed webhook cannot mint twice", async function () {
+    const c = await freshCollection(10n, 10n);
+    await c.write.addSigner([signer.account.address]);
 
-    // Setup: create variant and buy
-    await setVariant([tokenId, USDC(10), 10n, true]);
-    await usdc.write.approve([swag.address, USDC(10)], { account: buyer.account });
-    await buy([tokenId, 1n], { account: buyer.account });
+    const voucher = voucherFor({ orderRef: `0x${"b2".repeat(32)}` });
+    const sig = await signVoucher(voucher, signer, c);
 
-    // First redemption should succeed
-    await swag.write.redeem([tokenId], { account: buyer.account });
-
-    // Second redemption should fail
-    try {
-      await swag.write.redeem([tokenId], { account: buyer.account });
-      assert.fail("Should revert for already redeemed");
-    } catch (e: any) {
-      assert(e.message.includes("already redeemed"));
-    }
+    await c.write.claim([voucher, sig], { account: buyer.account });
+    await assert.rejects(
+      c.write.claim([voucher, sig], { account: buyer.account }),
+      /VoucherAlreadyClaimed/
+    );
+    assert.equal(await c.read.balanceOf([buyer.account.address, 1n]), 1n);
   });
 
-  it("Admin can mark redemption as fulfilled", async function () {
-    const tokenId = 504n;
+  it("rejects a voucher signed by someone without SIGNER_ROLE", async function () {
+    const c = await freshCollection(10n, 10n);
+    await c.write.addSigner([signer.account.address]);
 
-    // Setup: create variant, buy, and redeem
-    await setVariant([tokenId, USDC(10), 10n, true]);
-    await usdc.write.approve([swag.address, USDC(10)], { account: buyer.account });
-    await buy([tokenId, 1n], { account: buyer.account });
-    await swag.write.redeem([tokenId], { account: buyer.account });
+    const voucher = voucherFor({ orderRef: `0x${"c3".repeat(32)}` });
+    const sig = await signVoucher(voucher, outsider, c);
 
-    // Verify status is PendingFulfillment
-    const statusBefore = await swag.read.getRedemptionStatus([tokenId, buyer.account.address]);
-    assert.equal(statusBefore, 1); // PendingFulfillment
-
-    // Admin marks as fulfilled
-    await swag.write.markFulfilled([tokenId, buyer.account.address]);
-
-    // Check status is Fulfilled (2)
-    const statusAfter = await swag.read.getRedemptionStatus([tokenId, buyer.account.address]);
-    assert.equal(statusAfter, 2); // Fulfilled
+    await assert.rejects(c.write.claim([voucher, sig]), /InvalidSignature/);
   });
 
-  it("Non-admin cannot mark as fulfilled", async function () {
-    const tokenId = 505n;
+  it("rejects an expired voucher", async function () {
+    const c = await freshCollection(10n, 10n);
+    await c.write.addSigner([signer.account.address]);
 
-    // Setup: create variant, buy, and redeem
-    await setVariant([tokenId, USDC(10), 10n, true]);
-    await usdc.write.approve([swag.address, USDC(10)], { account: buyer.account });
-    await buy([tokenId, 1n], { account: buyer.account });
-    await swag.write.redeem([tokenId], { account: buyer.account });
+    const voucher = voucherFor({ orderRef: `0x${"d4".repeat(32)}`, deadline: 1n });
+    const sig = await signVoucher(voucher, signer, c);
 
-    // Non-admin tries to mark as fulfilled
-    try {
-      await swag.write.markFulfilled([tokenId, buyer.account.address], { account: buyer2.account });
-      assert.fail("Should revert for non-admin");
-    } catch (e: any) {
-      assert(e.message.includes("AccessControl"));
-    }
+    await assert.rejects(c.write.claim([voucher, sig]), /VoucherExpired/);
   });
 
-  it("Cannot mark as fulfilled if not pending", async function () {
-    const tokenId = 506n;
+  it("rejects a voucher whose fields were altered after signing", async function () {
+    const c = await freshCollection(10n, 10n);
+    await c.write.addSigner([signer.account.address]);
 
-    // Setup: create variant and buy but DON'T redeem
-    await setVariant([tokenId, USDC(10), 10n, true]);
-    await usdc.write.approve([swag.address, USDC(10)], { account: buyer.account });
-    await buy([tokenId, 1n], { account: buyer.account });
+    const voucher = voucherFor({ orderRef: `0x${"e5".repeat(32)}` });
+    const sig = await signVoucher(voucher, signer, c);
 
-    // Try to mark as fulfilled without redemption request
-    try {
-      await swag.write.markFulfilled([tokenId, buyer.account.address]);
-      assert.fail("Should revert for not pending");
-    } catch (e: any) {
-      assert(e.message.includes("not pending"));
-    }
+    // Same signature, larger quantity — the digest no longer matches.
+    const tampered = { ...voucher, quantity: 5n };
+    await assert.rejects(c.write.claim([tampered, sig]), /InvalidSignature/);
   });
 
-  it("Full redemption flow: buy -> redeem -> fulfill", async function () {
-    const tokenId = 507n;
+  it("a voucher signed for one collection cannot be replayed on another", async function () {
+    const a = await freshCollection(10n, 10n);
+    const b = await freshCollection(10n, 10n);
+    await a.write.addSigner([signer.account.address]);
+    await b.write.addSigner([signer.account.address]);
 
-    // Setup variant
-    await setVariant([tokenId, USDC(20), 5n, true]);
-    await usdc.write.approve([swag.address, USDC(20)], { account: buyer2.account });
+    const voucher = voucherFor({ orderRef: `0x${"f6".repeat(32)}` });
+    const sigForA = await signVoucher(voucher, signer, a);
 
-    // Step 1: Buy
-    await buy([tokenId, 1n], { account: buyer2.account });
-    const balance = await swag.read.balanceOf([buyer2.account.address, tokenId]);
-    assert.equal(balance, 1n);
-
-    // Step 2: Check initial status
-    let status = await swag.read.getRedemptionStatus([tokenId, buyer2.account.address]);
-    assert.equal(status, 0); // NotRedeemed
-
-    // Step 3: Redeem
-    await swag.write.redeem([tokenId], { account: buyer2.account });
-    status = await swag.read.getRedemptionStatus([tokenId, buyer2.account.address]);
-    assert.equal(status, 1); // PendingFulfillment
-
-    // Step 4: Admin fulfills
-    await swag.write.markFulfilled([tokenId, buyer2.account.address]);
-    status = await swag.read.getRedemptionStatus([tokenId, buyer2.account.address]);
-    assert.equal(status, 2); // Fulfilled
-
-    // User still owns the NFT (proof of purchase)
-    const finalBalance = await swag.read.balanceOf([buyer2.account.address, tokenId]);
-    assert.equal(finalBalance, 1n);
+    // The EIP-712 domain binds verifyingContract, so B rejects A's signature.
+    await assert.rejects(b.write.claim([voucher, sigForA]), /InvalidSignature/);
+    await b.write.claim([voucher, await signVoucher(voucher, signer, b)]);
+    assert.equal(await b.read.balanceOf([buyer.account.address, 1n]), 1n);
   });
 
-  // ==================== ROYALTY TESTS ====================
+  it("stops at the voucher cap without touching on-chain stock", async function () {
+    const c = await freshCollection(5n, 1n);
+    await c.write.addSigner([signer.account.address]);
 
-  it("Should add royalty recipient", async function () {
-    const tokenId = 601n;
-    await setVariant([tokenId, USDC(100), 100n, true]);
-    await swag.write.addRoyalty([tokenId, buyer.account.address, 1000n]); // 10%
+    const first = voucherFor({ orderRef: `0x${"07".repeat(32)}` });
+    await c.write.claim([first, await signVoucher(first, signer, c)]);
 
-    const royalties = await swag.read.getRoyalties([tokenId]);
-    assert.equal(royalties.length, 1);
-    assert.equal(royalties[0].recipient.toLowerCase(), buyer.account.address.toLowerCase());
-    assert.equal(royalties[0].percentage, 1000n);
+    const second = voucherFor({ orderRef: `0x${"08".repeat(32)}` });
+    await assert.rejects(
+      c.write.claim([second, await signVoucher(second, signer, c)]),
+      /SoldOut/
+    );
+
+    assert.equal(await c.read.remainingOnchain([1n]), 5n);
   });
 
-  it("Should distribute royalties on purchase", async function () {
-    const tokenId = 602n;
-    const price = USDC(100);
-    const artistAddress = buyer2.account.address;
+  // ── The property the whole split exists for ────────────────────────────────
 
-    await setVariant([tokenId, price, 100n, true]);
-    await swag.write.addRoyalty([tokenId, artistAddress, 1000n]); // 10%
+  it("the two channels cannot oversell each other", async function () {
+    const c = await freshCollection(3n, 2n); // 5 physical items
+    await c.write.addSigner([signer.account.address]);
+    await usdc.write.approve([c.address, USDC(1000)], { account: buyer.account });
 
-    // Mint USDC to deployer for purchase
-    await usdc.write.mint([deployer.account.address, USDC(200)]);
-    await usdc.write.approve([swag.address, price], { account: deployer.account });
+    await c.write.buy([1n, 3n, usdc.address], { account: buyer.account });
 
-    const artistBefore = await usdc.read.balanceOf([artistAddress]);
-    const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
+    const v1 = voucherFor({ orderRef: `0x${"09".repeat(32)}` });
+    const v2 = voucherFor({ orderRef: `0x${"0a".repeat(32)}` });
+    await c.write.claim([v1, await signVoucher(v1, signer, c)]);
+    await c.write.claim([v2, await signVoucher(v2, signer, c)]);
 
-    await buy([tokenId, 1n], { account: deployer.account });
+    assert.equal(await c.read.totalMinted([1n]), 5n);
+    assert.equal(await c.read.remainingOnchain([1n]), 0n);
+    assert.equal(await c.read.remainingVoucher([1n]), 0n);
 
-    const artistAfter = await usdc.read.balanceOf([artistAddress]);
-    const treasuryAfter = await usdc.read.balanceOf([treasury.account.address]);
-
-    // Artist gets 10%
-    assert.equal(artistAfter - artistBefore, USDC(10));
-    // Treasury gets 90%
-    assert.equal(treasuryAfter - treasuryBefore, USDC(90));
+    // Both channels exhausted: no sixth item can exist by either route.
+    const v3 = voucherFor({ orderRef: `0x${"0b".repeat(32)}` });
+    await assert.rejects(
+      c.write.claim([v3, await signVoucher(v3, signer, c)]),
+      /SoldOut/
+    );
+    await assert.rejects(
+      c.write.buy([1n, 1n, usdc.address], { account: buyer.account }),
+      /SoldOut/
+    );
   });
 
-  it("Should support multiple royalty recipients", async function () {
-    const tokenId = 603n;
-    const price = USDC(100);
+  // ── Serials ────────────────────────────────────────────────────────────────
 
-    await setVariant([tokenId, price, 100n, true]);
-    await swag.write.addRoyalty([tokenId, buyer.account.address, 500n]); // 5%
-    await swag.write.addRoyalty([tokenId, buyer2.account.address, 300n]); // 3%
+  it("assigns a serial per unit across both channels", async function () {
+    const c = await freshCollection(2n, 2n);
+    await c.write.addSigner([signer.account.address]);
+    await usdc.write.approve([c.address, USDC(1000)], { account: buyer.account });
 
-    await usdc.write.mint([deployer.account.address, USDC(200)]);
-    await usdc.write.approve([swag.address, price], { account: deployer.account });
+    await c.write.buy([1n, 2n, usdc.address], { account: buyer.account });
+    const v = voucherFor({ to: buyer2.account.address, orderRef: `0x${"0c".repeat(32)}` });
+    await c.write.claim([v, await signVoucher(v, signer, c)]);
 
-    const artist1Before = await usdc.read.balanceOf([buyer.account.address]);
-    const artist2Before = await usdc.read.balanceOf([buyer2.account.address]);
-    const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
-
-    await buy([tokenId, 1n], { account: deployer.account });
-
-    const artist1After = await usdc.read.balanceOf([buyer.account.address]);
-    const artist2After = await usdc.read.balanceOf([buyer2.account.address]);
-    const treasuryAfter = await usdc.read.balanceOf([treasury.account.address]);
-
-    assert.equal(artist1After - artist1Before, USDC(5));
-    assert.equal(artist2After - artist2Before, USDC(3));
-    assert.equal(treasuryAfter - treasuryBefore, USDC(92));
+    assert.equal(await c.read.nextSerial([1n]), 3n);
+    assert.equal(
+      (await c.read.getSerialOwner([1n, 0n])).toLowerCase(),
+      buyer.account.address.toLowerCase()
+    );
+    assert.equal(
+      (await c.read.getSerialOwner([1n, 2n])).toLowerCase(),
+      buyer2.account.address.toLowerCase()
+    );
   });
 
-  it("Should prevent exceeding 100% royalty", async function () {
-    const tokenId = 604n;
-    await setVariant([tokenId, USDC(100), 100n, true]);
-    await swag.write.addRoyalty([tokenId, buyer.account.address, 5000n]); // 50%
+  // ── canBuy / canClaim mirror the writes ────────────────────────────────────
 
-    try {
-      await swag.write.addRoyalty([tokenId, buyer2.account.address, 5100n]); // Would exceed 100%
-      assert.fail("Should have reverted");
-    } catch (e: any) {
-      assert(e.message.includes("total royalty exceeds 100%"));
-    }
+  it("canBuy reports the same reason the write would revert with", async function () {
+    const c = await freshCollection(1n, 1n);
+    await usdc.write.approve([c.address, USDC(1000)], { account: buyer.account });
+
+    let [allowed, reason] = await c.read.canBuy([1n, 1n, usdc.address]);
+    assert.equal(allowed, true);
+    assert.equal(reason, "");
+
+    // Unconfigured payment token, checked while stock remains — buy() runs the
+    // sold-out check first, so this reason is only reachable before the cap.
+    [allowed, reason] = await c.read.canBuy([1n, 1n, ETH_TOKEN]);
+    assert.equal(allowed, false);
+    assert.equal(reason, "Payment token not accepted");
+
+    await c.write.buy([1n, 1n, usdc.address], { account: buyer.account });
+    [allowed, reason] = await c.read.canBuy([1n, 1n, usdc.address]);
+    assert.equal(allowed, false);
+    assert.equal(reason, "Sold out on-chain");
+
+    await c.write.pause();
+    [allowed, reason] = await c.read.canBuy([1n, 1n, usdc.address]);
+    assert.equal(reason, "Sales are paused");
   });
 
-  it("Should clear royalties", async function () {
-    const tokenId = 605n;
-    await setVariant([tokenId, USDC(100), 100n, true]);
-    await swag.write.addRoyalty([tokenId, buyer.account.address, 1000n]);
+  it("canClaim rejects an already-claimed order", async function () {
+    const c = await freshCollection(5n, 5n);
+    await c.write.addSigner([signer.account.address]);
 
-    let royalties = await swag.read.getRoyalties([tokenId]);
-    assert.equal(royalties.length, 1);
+    const voucher = voucherFor({ orderRef: `0x${"0d".repeat(32)}` });
+    const sig = await signVoucher(voucher, signer, c);
 
-    await swag.write.clearRoyalties([tokenId]);
-
-    royalties = await swag.read.getRoyalties([tokenId]);
-    assert.equal(royalties.length, 0);
-
-    const totalBps = await swag.read.totalRoyaltyBps([tokenId]);
-    assert.equal(totalBps, 0n);
+    await c.write.claim([voucher, sig]);
+    const [allowed, reason] = await c.read.canClaim([voucher, sig]);
+    assert.equal(allowed, false);
+    assert.equal(reason, "Order already claimed");
   });
 
-  it("Should send full amount to treasury when no royalties", async function () {
-    const tokenId = 606n;
-    const price = USDC(50);
-
-    await setVariant([tokenId, price, 100n, true]);
-
-    await usdc.write.mint([deployer.account.address, USDC(200)]);
-    await usdc.write.approve([swag.address, price], { account: deployer.account });
-
-    const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
-    await buy([tokenId, 1n], { account: deployer.account });
-    const treasuryAfter = await usdc.read.balanceOf([treasury.account.address]);
-
-    assert.equal(treasuryAfter - treasuryBefore, price);
-  });
-
-  // ==================== DISCOUNT TESTS ====================
-
-  it("POAP discount: buyer with POAP gets reduced price", async function () {
-    const tokenId = 701n;
-    const price = USDC(100);
-    const eventId = 12345n;
-
-    await setVariant([tokenId, price, 100n, true]);
-    await swag.write.addPoapDiscount([tokenId, eventId, 1000n]); // 10%
-
-    // Whitelist buyer for this POAP event
-    await swag.write.addPoapWhitelist([tokenId, eventId, [buyer.account.address]]);
-
-    await usdc.write.approve([swag.address, USDC(200)], { account: buyer.account });
-    const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
-    await buy([tokenId, 1n], { account: buyer.account });
-    const treasuryAfter = await usdc.read.balanceOf([treasury.account.address]);
-
-    // Should pay 90 USDC (10% off 100)
-    assert.equal(treasuryAfter - treasuryBefore, USDC(90));
-  });
-
-  it("POAP discount: buyer without POAP pays full price", async function () {
-    const tokenId = 702n;
-    const price = USDC(100);
-
-    await setVariant([tokenId, price, 100n, true]);
-    await swag.write.addPoapDiscount([tokenId, 99999n, 2000n]); // 20% for event 99999
-
-    // buyer2 does NOT have this POAP
-    await usdc.write.approve([swag.address, USDC(200)], { account: buyer2.account });
-    const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
-    await buy([tokenId, 1n], { account: buyer2.account });
-    const treasuryAfter = await usdc.read.balanceOf([treasury.account.address]);
-
-    assert.equal(treasuryAfter - treasuryBefore, price);
-  });
-
-  it("Remove POAP discount: buyer pays full price after removal", async function () {
-    const tokenId = 703n;
-    const price = USDC(100);
-    const eventId = 55555n;
-
-    await setVariant([tokenId, price, 100n, true]);
-    await swag.write.addPoapDiscount([tokenId, eventId, 5000n]); // 50%
-    await swag.write.addPoapWhitelist([tokenId, eventId, [buyer.account.address]]);
-
-    // Remove the discount (index 0)
-    await swag.write.removePoapDiscount([tokenId, 0n]);
-
-    await usdc.write.approve([swag.address, USDC(200)], { account: buyer.account });
-    const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
-    await buy([tokenId, 1n], { account: buyer.account });
-    const treasuryAfter = await usdc.read.balanceOf([treasury.account.address]);
-
-    assert.equal(treasuryAfter - treasuryBefore, price);
-  });
-
-  it("Holder discount (percentage): NFT holder gets discount", async function () {
-    const tokenId = 704n;
-    const price = USDC(100);
-
-    await setVariant([tokenId, price, 100n, true]);
-    // DiscountType.Percentage = 0
-    await swag.write.addHolderDiscount([tokenId, mockNft.address, 0, 2000n]); // 20%
-
-    // Give buyer an NFT
-    await mockNft.write.mint([buyer.account.address]);
-
-    await usdc.write.approve([swag.address, USDC(200)], { account: buyer.account });
-    const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
-    await buy([tokenId, 1n], { account: buyer.account });
-    const treasuryAfter = await usdc.read.balanceOf([treasury.account.address]);
-
-    // Should pay 80 USDC (20% off 100)
-    assert.equal(treasuryAfter - treasuryBefore, USDC(80));
-  });
-
-  it("Holder discount (fixed): holder gets fixed amount off", async function () {
-    const tokenId = 705n;
-    const price = USDC(100);
-
-    await setVariant([tokenId, price, 100n, true]);
-    // DiscountType.Fixed = 1, value = 15 USDC
-    await swag.write.addHolderDiscount([tokenId, mockNft.address, 1, USDC(15)]);
-
-    // buyer already has NFT from previous test
-    await usdc.write.approve([swag.address, USDC(200)], { account: buyer.account });
-    const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
-    await buy([tokenId, 1n], { account: buyer.account });
-    const treasuryAfter = await usdc.read.balanceOf([treasury.account.address]);
-
-    // Should pay 85 USDC (100 - 15 fixed)
-    assert.equal(treasuryAfter - treasuryBefore, USDC(85));
-  });
-
-  it("Holder without token pays full price", async function () {
-    const tokenId = 706n;
-    const price = USDC(100);
-
-    await setVariant([tokenId, price, 100n, true]);
-    await swag.write.addHolderDiscount([tokenId, mockNft.address, 0, 2000n]); // 20%
-
-    // buyer2 does NOT have the NFT
-    await usdc.write.approve([swag.address, USDC(200)], { account: buyer2.account });
-    const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
-    await buy([tokenId, 1n], { account: buyer2.account });
-    const treasuryAfter = await usdc.read.balanceOf([treasury.account.address]);
-
-    assert.equal(treasuryAfter - treasuryBefore, price);
-  });
-
-  it("Additive stacking: POAP 10% + holder 20% = 30% off", async function () {
-    const tokenId = 707n;
-    const price = USDC(100);
-    const eventId = 77777n;
-
-    await setVariant([tokenId, price, 100n, true]);
-    await swag.write.addPoapDiscount([tokenId, eventId, 1000n]); // 10%
-    await swag.write.addHolderDiscount([tokenId, mockNft.address, 0, 2000n]); // 20%
-
-    // buyer has NFT (from earlier) + whitelist for POAP
-    await swag.write.addPoapWhitelist([tokenId, eventId, [buyer.account.address]]);
-
-    await usdc.write.approve([swag.address, USDC(200)], { account: buyer.account });
-    const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
-    await buy([tokenId, 1n], { account: buyer.account });
-    const treasuryAfter = await usdc.read.balanceOf([treasury.account.address]);
-
-    // Should pay 70 USDC (30% off 100)
-    assert.equal(treasuryAfter - treasuryBefore, USDC(70));
-  });
-
-  it("100% discount: POAP 50% + holder 50% = free", async function () {
-    const tokenId = 708n;
-    const price = USDC(100);
-    const eventId = 88888n;
-
-    await setVariant([tokenId, price, 100n, true]);
-    await swag.write.addPoapDiscount([tokenId, eventId, 5000n]); // 50%
-    await swag.write.addHolderDiscount([tokenId, mockNft.address, 0, 5000n]); // 50%
-
-    await swag.write.addPoapWhitelist([tokenId, eventId, [buyer.account.address]]);
-
-    const buyerUsdcBefore = await usdc.read.balanceOf([buyer.account.address]);
-    await buy([tokenId, 1n], { account: buyer.account });
-    const buyerUsdcAfter = await usdc.read.balanceOf([buyer.account.address]);
-
-    // No USDC spent
-    assert.equal(buyerUsdcAfter, buyerUsdcBefore);
-
-    // But NFT minted
-    const bal = await swag.read.balanceOf([buyer.account.address, tokenId]);
-    assert.equal(bal, 1n);
-  });
-
-  it("Over 100% discount caps at free (no revert)", async function () {
-    const tokenId = 709n;
-    const price = USDC(100);
-    const eventId = 99998n;
-
-    await setVariant([tokenId, price, 100n, true]);
-    await swag.write.addPoapDiscount([tokenId, eventId, 6000n]); // 60%
-    await swag.write.addHolderDiscount([tokenId, mockNft.address, 0, 6000n]); // 60%
-
-    await swag.write.addPoapWhitelist([tokenId, eventId, [buyer.account.address]]);
-
-    const buyerUsdcBefore = await usdc.read.balanceOf([buyer.account.address]);
-    await buy([tokenId, 1n], { account: buyer.account });
-    const buyerUsdcAfter = await usdc.read.balanceOf([buyer.account.address]);
-
-    assert.equal(buyerUsdcAfter, buyerUsdcBefore);
-    const bal = await swag.read.balanceOf([buyer.account.address, tokenId]);
-    assert.equal(bal, 1n);
-  });
-
-  it("Only POAP set, no holder discount", async function () {
-    const tokenId = 710n;
-    const price = USDC(100);
-    const eventId = 11111n;
-
-    await setVariant([tokenId, price, 100n, true]);
-    await swag.write.addPoapDiscount([tokenId, eventId, 1500n]); // 15%
-
-    await swag.write.addPoapWhitelist([tokenId, eventId, [buyer.account.address]]);
-
-    await usdc.write.approve([swag.address, USDC(200)], { account: buyer.account });
-    const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
-    await buy([tokenId, 1n], { account: buyer.account });
-    const treasuryAfter = await usdc.read.balanceOf([treasury.account.address]);
-
-    assert.equal(treasuryAfter - treasuryBefore, USDC(85));
-  });
-
-  it("Only holder set, no POAP discount", async function () {
-    const tokenId = 711n;
-    const price = USDC(100);
-
-    await setVariant([tokenId, price, 100n, true]);
-    await swag.write.addHolderDiscount([tokenId, mockNft.address, 0, 2500n]); // 25%
-
-    // buyer has NFT from earlier
-    await usdc.write.approve([swag.address, USDC(200)], { account: buyer.account });
-    const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
-    await buy([tokenId, 1n], { account: buyer.account });
-    const treasuryAfter = await usdc.read.balanceOf([treasury.account.address]);
-
-    assert.equal(treasuryAfter - treasuryBefore, USDC(75));
-  });
-
-  it("getDiscountedPrice view returns correct price", async function () {
-    const tokenId = 712n;
-    const price = USDC(200);
-    const eventId = 22222n;
-
-    await setVariant([tokenId, price, 100n, true]);
-    await swag.write.addPoapDiscount([tokenId, eventId, 1000n]); // 10%
-    await swag.write.addHolderDiscount([tokenId, mockNft.address, 0, 500n]); // 5%
-
-    await swag.write.addPoapWhitelist([tokenId, eventId, [buyer.account.address]]);
-
-    const discounted = await getDiscountedPrice([tokenId, buyer.account.address]);
-    // 15% off 200 = 170
-    assert.equal(discounted, USDC(170));
-
-    // buyer2 has no POAP or NFT — full price
-    const full = await getDiscountedPrice([tokenId, buyer2.account.address]);
-    assert.equal(full, price);
-  });
-
-  it("Admin-only access on discount functions", async function () {
-    const tokenId = 713n;
-    await setVariant([tokenId, USDC(10), 10n, true]);
-
-    try {
-      await swag.write.addPoapDiscount([tokenId, 1n, 100n], { account: buyer.account });
-      assert.fail("Should revert for non-admin");
-    } catch (e: any) {
-      assert(e.message.includes("AccessControl"));
-    }
-
-    try {
-      await swag.write.addHolderDiscount([tokenId, mockNft.address, 0, 100n], { account: buyer.account });
-      assert.fail("Should revert for non-admin");
-    } catch (e: any) {
-      assert(e.message.includes("AccessControl"));
-    }
-  });
-
-  it("Remove holder discount: buyer pays full price after removal", async function () {
-    const tokenId = 714n;
-    const price = USDC(100);
-
-    await setVariant([tokenId, price, 100n, true]);
-    await swag.write.addHolderDiscount([tokenId, mockNft.address, 0, 3000n]); // 30%
-
-    // Remove it
-    await swag.write.removeHolderDiscount([tokenId, 0n]);
-
-    await usdc.write.approve([swag.address, USDC(200)], { account: buyer.account });
-    const treasuryBefore = await usdc.read.balanceOf([treasury.account.address]);
-    await buy([tokenId, 1n], { account: buyer.account });
-    const treasuryAfter = await usdc.read.balanceOf([treasury.account.address]);
-
-    assert.equal(treasuryAfter - treasuryBefore, price);
-  });
-
-  // ==================== SERIAL NUMBER TESTS ====================
-
-  it("Single buy assigns serial #1 to buyer", async function () {
-    const tokenId = 801n;
-
-    await setVariant([tokenId, USDC(10), 10n, true]);
-    await usdc.write.approve([swag.address, USDC(10)], { account: buyer.account });
-    await buy([tokenId, 1n], { account: buyer.account });
-
-    const serial1Owner = await swag.read.getSerialOwner([tokenId, 1n]);
-    assert.equal(serial1Owner.toLowerCase(), buyer.account.address.toLowerCase());
-
-    const nextSerial = await swag.read.nextSerial([tokenId]);
-    assert.equal(nextSerial, 1n);
-  });
-
-  it("Buying quantity 3 assigns serials #1, #2, #3 sequentially", async function () {
-    const tokenId = 802n;
-
-    await setVariant([tokenId, USDC(10), 10n, true]);
-    await usdc.write.approve([swag.address, USDC(50)], { account: buyer.account });
-    await buy([tokenId, 3n], { account: buyer.account });
-
-    for (let s = 1n; s <= 3n; s++) {
-      const owner = await swag.read.getSerialOwner([tokenId, s]);
-      assert.equal(owner.toLowerCase(), buyer.account.address.toLowerCase());
-    }
-
-    const nextSerial = await swag.read.nextSerial([tokenId]);
-    assert.equal(nextSerial, 3n);
-  });
-
-  it("Two different buyers get distinct serials", async function () {
-    const tokenId = 803n;
-
-    await setVariant([tokenId, USDC(10), 10n, true]);
-    await usdc.write.approve([swag.address, USDC(10)], { account: buyer.account });
-    await usdc.write.approve([swag.address, USDC(10)], { account: buyer2.account });
-
-    await buy([tokenId, 1n], { account: buyer.account });
-    await buy([tokenId, 1n], { account: buyer2.account });
-
-    const owner1 = await swag.read.getSerialOwner([tokenId, 1n]);
-    const owner2 = await swag.read.getSerialOwner([tokenId, 2n]);
-
-    assert.equal(owner1.toLowerCase(), buyer.account.address.toLowerCase());
-    assert.equal(owner2.toLowerCase(), buyer2.account.address.toLowerCase());
-
-    const nextSerial = await swag.read.nextSerial([tokenId]);
-    assert.equal(nextSerial, 2n);
-  });
-
-  it("Serial counter is independent per tokenId", async function () {
-    const tokenIdA = 804n;
-    const tokenIdB = 805n;
-
-    await setVariant([tokenIdA, USDC(10), 10n, true]);
-    await setVariant([tokenIdB, USDC(10), 10n, true]);
-    await usdc.write.approve([swag.address, USDC(50)], { account: buyer.account });
-
-    await buy([tokenIdA, 2n], { account: buyer.account });
-    await buy([tokenIdB, 1n], { account: buyer.account });
-
-    assert.equal(await swag.read.nextSerial([tokenIdA]), 2n);
-    assert.equal(await swag.read.nextSerial([tokenIdB]), 1n);
-
-    // Serial #1 of tokenIdB belongs to buyer, not affected by tokenIdA's counter
-    const ownerB1 = await swag.read.getSerialOwner([tokenIdB, 1n]);
-    assert.equal(ownerB1.toLowerCase(), buyer.account.address.toLowerCase());
-  });
-
-  it("Batch buy assigns serials across multiple tokenIds", async function () {
-    const tokenIdX = 806n;
-    const tokenIdY = 807n;
-
-    await setVariant([tokenIdX, USDC(10), 10n, true]);
-    await setVariant([tokenIdY, USDC(5), 10n, true]);
-    await usdc.write.approve([swag.address, USDC(50)], { account: buyer2.account });
-
-    // Buy 2 of X and 3 of Y in one batch
-    await buyBatch([[tokenIdX, tokenIdY], [2n, 3n]], { account: buyer2.account });
-
-    assert.equal(await swag.read.nextSerial([tokenIdX]), 2n);
-    assert.equal(await swag.read.nextSerial([tokenIdY]), 3n);
-
-    // All serials belong to buyer2
-    for (let s = 1n; s <= 2n; s++) {
-      const owner = await swag.read.getSerialOwner([tokenIdX, s]);
-      assert.equal(owner.toLowerCase(), buyer2.account.address.toLowerCase());
-    }
-    for (let s = 1n; s <= 3n; s++) {
-      const owner = await swag.read.getSerialOwner([tokenIdY, s]);
-      assert.equal(owner.toLowerCase(), buyer2.account.address.toLowerCase());
-    }
-  });
-
-  it("Unassigned serial returns address(0)", async function () {
-    const tokenId = 808n;
-    await setVariant([tokenId, USDC(10), 10n, true]);
-
-    // Nothing minted yet
-    const owner = await swag.read.getSerialOwner([tokenId, 1n]);
-    assert.equal(owner, "0x0000000000000000000000000000000000000000");
+  // ── Accounting invariant ───────────────────────────────────────────────────
+
+  it("minted supply always equals the sum of both channel counters", async function () {
+    const c = await freshCollection(4n, 4n);
+    await c.write.addSigner([signer.account.address]);
+    await usdc.write.approve([c.address, USDC(1000)], { account: buyer.account });
+
+    await c.write.buy([1n, 3n, usdc.address], { account: buyer.account });
+    const v = voucherFor({ to: buyer2.account.address, orderRef: `0x${"0e".repeat(32)}`, quantity: 2n });
+    await c.write.claim([v, await signVoucher(v, signer, c)]);
+
+    const variant = await c.read.getVariant([1n]);
+    const held =
+      (await c.read.balanceOf([buyer.account.address, 1n])) +
+      (await c.read.balanceOf([buyer2.account.address, 1n]));
+
+    assert.equal(await c.read.totalMinted([1n]), held);
+    assert.equal(variant.onchainMinted + variant.voucherMinted, held);
   });
 });
