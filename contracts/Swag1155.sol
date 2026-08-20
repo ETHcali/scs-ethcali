@@ -1,202 +1,199 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity 0.8.28;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 /**
- * @title ETH Cali Swag (ERC-1155)
- * @notice One contract per physical product. Sizes/variants are tokenIds (1-indexed).
- *         Deployed exclusively via SwagFactory.deployCollection().
+ * @title Swag1155
+ * @notice ERC-1155 proof-of-purchase for ETH Cali merch, sold through two
+ *         channels into one inventory.
  *
- *         Payment model:
- *         - Admin sets a price per tokenId per payment token via setPaymentOption().
- *         - Accepted tokens: any ERC-20 (USDC, USDT, DAI, WETH, ...) or native ETH.
- *         - Native ETH uses the sentinel address ETH_TOKEN = 0xEeee...EEeE.
- *         - Prices are denominated in each token's own base units.
- *         - Discounts (POAP + holder) stack additively and apply to whichever token is used.
+ * Shopify owns commerce: catalogue, fiat pricing, discount codes, customer
+ * accounts, orders, fulfilment and shipping. None of that is on-chain, because
+ * none of it needs to be and Shopify does it better. What Shopify cannot do is
+ * prove that a specific wallet owns a specific item — that is this contract.
+ *
+ * ── Two channels, two buckets ────────────────────────────────────────────────
+ *
+ * A variant's supply is split at configuration time:
+ *
+ *   onchainCap  units sellable here via buy(), paid in USDC or native
+ *   voucherCap  units reserved for Shopify, claimable via claim() with a
+ *               signed voucher
+ *
+ * They are deliberately separate counters. If both channels drew from one
+ * shared cap, a Shopify checkout and an on-chain buy() landing in the same
+ * moment could each see "1 left" and both commit — overselling a physical
+ * item that only exists once. Set Shopify's inventory for the product to
+ * exactly `voucherCap` and neither channel can eat the other's stock.
+ *
+ * ── The Shopify path ─────────────────────────────────────────────────────────
+ *
+ * Order paid -> Shopify webhook -> your backend signs an EIP-712 voucher ->
+ * buyer calls claim() whenever they like. No hot wallet holds a minting key,
+ * no gas is spent on buyers who never claim, and `orderRef` makes a replayed
+ * webhook a no-op rather than a double mint.
+ *
+ * @dev Clone-only. The constructor sets `_initialized = true`, so a directly
+ *      deployed instance can never be configured — get instances from
+ *      SwagFactory.deployCollection().
  */
-contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard {
-    using EnumerableSet for EnumerableSet.UintSet;
+contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard, Pausable, EIP712 {
+    using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
 
     // ── Constants ─────────────────────────────────────────────────────────────
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
-    /// @notice Sentinel address representing native ETH as a payment token.
+    /// @notice Signs Shopify claim vouchers. Hold this on the backend, not on an admin EOA.
+    bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
+
+    /// @notice Sentinel address representing the chain's native token.
     address public constant ETH_TOKEN = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
-    uint256 public constant ROYALTY_DENOMINATOR = 10000;
+    bytes32 private constant CLAIM_TYPEHASH = keccak256(
+        "Claim(uint256 tokenId,address to,uint256 quantity,bytes32 orderRef,uint256 deadline)"
+    );
 
     // ── Structs ───────────────────────────────────────────────────────────────
 
     struct Variant {
-        uint256 maxSupply;
-        uint256 minted;
+        uint128 onchainCap;     // Units sellable via buy()
+        uint128 onchainMinted;
+        uint128 voucherCap;     // Units reserved for the Shopify channel
+        uint128 voucherMinted;
         bool    active;
     }
 
-    struct RoyaltyInfo {
-        address recipient;
-        uint256 percentage; // Basis points (e.g. 500 = 5%)
-    }
-
-    enum RedemptionStatus {
-        NotRedeemed,        // 0 - User has not claimed yet
-        PendingFulfillment, // 1 - User claimed, waiting for admin to verify shipment
-        Fulfilled           // 2 - Admin verified shipment complete
-    }
-
-    enum DiscountType { Percentage, Fixed }
-
-    struct PoapDiscount {
-        uint256 eventId;
-        uint256 discountBps; // Basis points (1000 = 10%)
-        bool    active;
-    }
-
-    struct HolderDiscount {
-        address      token;        // ERC-20 or ERC-721 contract
-        DiscountType discountType;
-        uint256      value;        // bps for Percentage; payment-token base units for Fixed
-        bool         active;
+    /**
+     * @notice A Shopify order, signed by the backend, redeemable once.
+     * @param orderRef Hash of the Shopify order id. The idempotency key: a
+     *                 replayed webhook produces the same voucher, and the
+     *                 second claim reverts instead of minting again.
+     */
+    struct ClaimVoucher {
+        uint256 tokenId;
+        address to;
+        uint256 quantity;
+        bytes32 orderRef;
+        uint256 deadline;
     }
 
     // ── State ─────────────────────────────────────────────────────────────────
 
-    /// @dev Guards the initialize() function — true on the implementation contract itself.
     bool private _initialized;
 
+    /// @notice Receives all on-chain sale proceeds.
     address public treasury;
 
-    // Variant inventory per tokenId
     mapping(uint256 => Variant) public variants;
-
-    // Per-token metadata URIs
     mapping(uint256 => string) private _tokenURIs;
+    uint256[] private _tokenIds;
 
-    // Redemption status: tokenId => owner => status
-    mapping(uint256 => mapping(address => RedemptionStatus)) public redemptions;
-
-    // Payment options:
-    //   variantTokenPrice[tokenId][paymentToken] = price in that token's base units
-    //   0 means the token is not accepted for that variant.
+    /// @dev tokenId => payment token => unit price, in that token's own base units.
     mapping(uint256 => mapping(address => uint256)) public variantTokenPrice;
-
-    // Enumerable set of accepted payment tokens per tokenId (for frontend enumeration)
     mapping(uint256 => EnumerableSet.AddressSet) private _variantPaymentTokens;
 
-    // Royalties per tokenId
-    mapping(uint256 => RoyaltyInfo[]) public royaltyRecipients;
-    mapping(uint256 => uint256)       public totalRoyaltyBps;
+    /// @dev Serial numbers, so a physical item maps to a numbered token.
+    mapping(uint256 => uint256) public nextSerial;
+    mapping(uint256 => mapping(uint256 => address)) public serialOwner;
 
-    // POAP discounts per tokenId
-    mapping(uint256 => PoapDiscount[]) public poapDiscounts;
-
-    // Token-holder discounts per tokenId
-    mapping(uint256 => HolderDiscount[]) public holderDiscounts;
-
-    // POAP whitelist: tokenId => eventId => address => whitelisted
-    mapping(uint256 => mapping(uint256 => mapping(address => bool))) public poapWhitelist;
-
-    // Serial numbers: tokenId => next serial (1-indexed)
-    mapping(uint256 => uint256)                         public nextSerial;
-    mapping(uint256 => mapping(uint256 => address))     public serialOwner;
-
-    // Known tokenIds for iteration
-    EnumerableSet.UintSet private _tokenIds;
+    /// @dev Spent vouchers, keyed on the Shopify order reference.
+    mapping(bytes32 => bool) public orderClaimed;
 
     // ── Events ────────────────────────────────────────────────────────────────
 
-    event Purchased(
-        address indexed buyer,
-        uint256 indexed tokenId,
-        uint256 quantity,
-        address indexed paymentToken,
-        uint256 unitPrice,
-        uint256 totalPrice
-    );
-    event PurchasedBatch(
-        address indexed buyer,
-        uint256[] tokenIds,
-        uint256[] quantities,
-        address indexed paymentToken,
-        uint256 totalPrice
-    );
-
-    event VariantUpdated(uint256 indexed tokenId, uint256 maxSupply, bool active);
-    event VariantURISet(uint256 indexed tokenId, string uri);
-    event TreasuryUpdated(address indexed newTreasury);
-    event AdminAdded(address indexed admin);
-    event AdminRemoved(address indexed admin);
-
+    event VariantSet(uint256 indexed tokenId, uint128 onchainCap, uint128 voucherCap, bool active);
     event PaymentOptionSet(uint256 indexed tokenId, address indexed token, uint256 price);
     event PaymentOptionRemoved(uint256 indexed tokenId, address indexed token);
+    event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
+    event Purchased(
+        uint256 indexed tokenId,
+        address indexed buyer,
+        uint256 quantity,
+        address indexed paymentToken,
+        uint256 paid
+    );
+    event Claimed(
+        uint256 indexed tokenId,
+        address indexed to,
+        uint256 quantity,
+        bytes32 indexed orderRef
+    );
 
-    event RedemptionRequested(address indexed owner, uint256 indexed tokenId);
-    event RedemptionFulfilled(address indexed owner, uint256 indexed tokenId, address indexed admin);
+    // ── Errors ────────────────────────────────────────────────────────────────
 
-    event RoyaltyAdded(uint256 indexed tokenId, address indexed recipient, uint256 percentage);
-    event RoyaltiesCleared(uint256 indexed tokenId);
+    error AlreadyInitialized();
+    error InvalidTreasury();
+    error InvalidRecipient();
+    error EmptyURI();
+    error VariantNotFound(uint256 tokenId);
+    error VariantNotActive(uint256 tokenId);
+    error ZeroQuantity();
+    error CapBelowMinted();
+    error SoldOut(uint256 tokenId, uint256 remaining);
+    error PaymentTokenNotAccepted(uint256 tokenId, address token);
+    error IncorrectEthAmount(uint256 expected, uint256 sent);
+    error EthNotAccepted();
+    error EthTransferFailed();
+    error VoucherExpired(uint256 deadline);
+    error VoucherAlreadyClaimed(bytes32 orderRef);
+    error InvalidSignature();
+    error DirectEthNotAccepted();
 
-    event PoapDiscountAdded(uint256 indexed tokenId, uint256 eventId, uint256 discountBps);
-    event PoapDiscountRemoved(uint256 indexed tokenId, uint256 eventId);
-    event HolderDiscountAdded(uint256 indexed tokenId, address indexed token, DiscountType discountType, uint256 value);
-    event HolderDiscountRemoved(uint256 indexed tokenId, address indexed token);
-    event DiscountApplied(address indexed buyer, uint256 indexed tokenId, address paymentToken, uint256 originalPrice, uint256 finalPrice);
-    event PoapWhitelistUpdated(uint256 indexed tokenId, uint256 indexed eventId, address[] addresses, bool added);
+    // ── Constructor / initializer ─────────────────────────────────────────────
 
-    event SerialMinted(address indexed buyer, uint256 indexed tokenId, uint256 indexed serial);
-
-    // ── Constructor / Initializer ─────────────────────────────────────────────
-
-    /**
-     * @dev Locks the implementation contract against initialization.
-     *      Each clone deployed by SwagFactory has its own storage, so clones
-     *      start with _initialized = false and must call initialize().
-     */
-    constructor() ERC1155("") {
-        _initialized = true; // prevent direct initialization of the implementation
+    /// @dev Locks the implementation. Only clones are usable.
+    constructor() ERC1155("") EIP712("ETHCaliSwag", "1") {
+        _initialized = true;
     }
 
-    /**
-     * @notice Initialize a clone deployed by SwagFactory.
-     *         Called once immediately after Clones.clone().
-     * @param baseURI      Base URI for token metadata (per-token URIs override this)
-     * @param _treasury    Address receiving sale proceeds
-     * @param initialAdmin Address granted DEFAULT_ADMIN_ROLE + ADMIN_ROLE
-     */
     function initialize(
         string memory baseURI,
         address _treasury,
         address initialAdmin
     ) external {
-        require(!_initialized, "already initialized");
+        if (_initialized) revert AlreadyInitialized();
         _initialized = true;
+
+        if (_treasury == address(0)) revert InvalidTreasury();
+
         _setURI(baseURI);
-        require(_treasury != address(0), "invalid treasury");
         treasury = _treasury;
+
         address admin = initialAdmin == address(0) ? msg.sender : initialAdmin;
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ADMIN_ROLE, admin);
     }
 
-    // ── Admin Management ──────────────────────────────────────────────────────
+    // ── Admin: roles and treasury ─────────────────────────────────────────────
 
     function addAdmin(address admin) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(admin != address(0), "invalid address");
+        if (admin == address(0)) revert InvalidRecipient();
         _grantRole(ADMIN_ROLE, admin);
-        emit AdminAdded(admin);
     }
 
     function removeAdmin(address admin) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _revokeRole(ADMIN_ROLE, admin);
-        emit AdminRemoved(admin);
+    }
+
+    /// @notice Authorise a backend key to sign Shopify vouchers.
+    function addSigner(address signer) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (signer == address(0)) revert InvalidRecipient();
+        _grantRole(SIGNER_ROLE, signer);
+    }
+
+    function removeSigner(address signer) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _revokeRole(SIGNER_ROLE, signer);
     }
 
     function isAdmin(address account) external view returns (bool) {
@@ -208,257 +205,239 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard {
     }
 
     function setTreasury(address newTreasury) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newTreasury != address(0), "invalid treasury");
+        if (newTreasury == address(0)) revert InvalidTreasury();
+        address old = treasury;
         treasury = newTreasury;
-        emit TreasuryUpdated(newTreasury);
+        emit TreasuryUpdated(old, newTreasury);
     }
 
-    // ── Variant Management ────────────────────────────────────────────────────
+    function pause() external onlyRole(ADMIN_ROLE) {
+        _pause();
+    }
+
+    function unpause() external onlyRole(ADMIN_ROLE) {
+        _unpause();
+    }
+
+    // ── Admin: variants ───────────────────────────────────────────────────────
 
     /**
-     * @notice Create or update a variant (supply + active flag).
-     *         Use setPaymentOption() separately to configure accepted tokens and prices.
+     * @notice Create or reconfigure a variant.
+     * @param onchainCap Units sellable via buy()
+     * @param voucherCap Units reserved for Shopify. Set the Shopify product's
+     *                   inventory to this number.
+     * @dev Neither cap may be cut below what that channel has already minted —
+     *      that would make `remaining` underflow and strand the counter.
      */
-    function setVariant(uint256 tokenId, uint256 maxSupply, bool active) external onlyRole(ADMIN_ROLE) {
+    function setVariant(
+        uint256 tokenId,
+        uint128 onchainCap,
+        uint128 voucherCap,
+        bool active
+    ) public onlyRole(ADMIN_ROLE) {
         Variant storage v = variants[tokenId];
-        require(maxSupply >= v.minted, "maxSupply < minted");
-        v.maxSupply = maxSupply;
-        v.active    = active;
-        _tokenIds.add(tokenId);
-        emit VariantUpdated(tokenId, maxSupply, active);
+
+        if (onchainCap < v.onchainMinted || voucherCap < v.voucherMinted) revert CapBelowMinted();
+
+        if (v.onchainCap == 0 && v.voucherCap == 0 && bytes(_tokenURIs[tokenId]).length == 0) {
+            _tokenIds.push(tokenId);
+        }
+
+        v.onchainCap = onchainCap;
+        v.voucherCap = voucherCap;
+        v.active = active;
+
+        emit VariantSet(tokenId, onchainCap, voucherCap, active);
     }
 
-    /**
-     * @notice Create or update a variant with a per-token metadata URI.
-     */
     function setVariantWithURI(
         uint256 tokenId,
-        uint256 maxSupply,
-        bool    active,
-        string memory tokenURI
+        uint128 onchainCap,
+        uint128 voucherCap,
+        bool active,
+        string calldata metadataURI
     ) external onlyRole(ADMIN_ROLE) {
-        require(bytes(tokenURI).length > 0, "invalid URI");
-        Variant storage v = variants[tokenId];
-        require(maxSupply >= v.minted, "maxSupply < minted");
-        v.maxSupply        = maxSupply;
-        v.active           = active;
-        _tokenURIs[tokenId] = tokenURI;
-        _tokenIds.add(tokenId);
-        emit VariantUpdated(tokenId, maxSupply, active);
-        emit VariantURISet(tokenId, tokenURI);
+        if (bytes(metadataURI).length == 0) revert EmptyURI();
+        setVariant(tokenId, onchainCap, voucherCap, active);
+        _tokenURIs[tokenId] = metadataURI;
     }
 
-    function setBaseURI(string memory newURI) external onlyRole(ADMIN_ROLE) {
+    function setBaseURI(string calldata newURI) external onlyRole(ADMIN_ROLE) {
         _setURI(newURI);
     }
 
-    // ── Payment Options ───────────────────────────────────────────────────────
+    // ── Admin: pricing ────────────────────────────────────────────────────────
 
     /**
-     * @notice Set or update the price for a specific payment token on a variant.
-     * @param tokenId       Variant token ID
-     * @param token         ERC-20 address, or ETH_TOKEN (0xEeee...EEeE) for native ETH
-     * @param price         Price in that token's base units (e.g. 25_000_000 for 25 USDC)
+     * @notice Set the on-chain unit price of a variant in one payment token.
+     * @param price In the token's OWN base units. USDC is 6 decimals, so 50
+     *              USDC is 50_000_000 — not 50e18.
      */
-    function setPaymentOption(uint256 tokenId, address token, uint256 price) external onlyRole(ADMIN_ROLE) {
-        require(token != address(0), "invalid token");
-        require(price > 0, "price must be > 0");
+    function setPaymentOption(uint256 tokenId, address token, uint256 price)
+        external
+        onlyRole(ADMIN_ROLE)
+    {
+        if (token == address(0)) revert PaymentTokenNotAccepted(tokenId, token);
         variantTokenPrice[tokenId][token] = price;
         _variantPaymentTokens[tokenId].add(token);
         emit PaymentOptionSet(tokenId, token, price);
     }
 
-    /**
-     * @notice Remove a payment token from a variant (token no longer accepted).
-     */
     function removePaymentOption(uint256 tokenId, address token) external onlyRole(ADMIN_ROLE) {
-        require(_variantPaymentTokens[tokenId].contains(token), "not a payment option");
-        delete variantTokenPrice[tokenId][token];
         _variantPaymentTokens[tokenId].remove(token);
+        delete variantTokenPrice[tokenId][token];
         emit PaymentOptionRemoved(tokenId, token);
     }
 
-    /**
-     * @notice Get all accepted payment tokens and their prices for a variant.
-     * @return tokens  Array of accepted token addresses (ETH_TOKEN for native ETH)
-     * @return prices  Corresponding prices in each token's base units
-     */
-    function getPaymentOptions(uint256 tokenId)
-        external view
-        returns (address[] memory tokens, uint256[] memory prices)
-    {
-        uint256 len = _variantPaymentTokens[tokenId].length();
-        tokens = new address[](len);
-        prices = new uint256[](len);
-        for (uint256 i = 0; i < len; i++) {
-            tokens[i] = _variantPaymentTokens[tokenId].at(i);
-            prices[i] = variantTokenPrice[tokenId][tokens[i]];
-        }
+    function getPaymentTokens(uint256 tokenId) external view returns (address[] memory) {
+        return _variantPaymentTokens[tokenId].values();
     }
 
-    /**
-     * @notice Get the price for a specific token on a variant (0 = not accepted).
-     */
     function getTokenPrice(uint256 tokenId, address token) external view returns (uint256) {
+        if (!_variantPaymentTokens[tokenId].contains(token)) {
+            revert PaymentTokenNotAccepted(tokenId, token);
+        }
         return variantTokenPrice[tokenId][token];
     }
 
-    // ── Royalty Management ────────────────────────────────────────────────────
-
-    function addRoyalty(uint256 tokenId, address recipient, uint256 percentage) external onlyRole(ADMIN_ROLE) {
-        require(recipient != address(0), "invalid recipient");
-        require(percentage > 0, "percentage must be > 0");
-        require(totalRoyaltyBps[tokenId] + percentage < ROYALTY_DENOMINATOR, "total royalty exceeds 100%");
-        royaltyRecipients[tokenId].push(RoyaltyInfo({ recipient: recipient, percentage: percentage }));
-        totalRoyaltyBps[tokenId] += percentage;
-        emit RoyaltyAdded(tokenId, recipient, percentage);
-    }
-
-    function clearRoyalties(uint256 tokenId) external onlyRole(ADMIN_ROLE) {
-        delete royaltyRecipients[tokenId];
-        totalRoyaltyBps[tokenId] = 0;
-        emit RoyaltiesCleared(tokenId);
-    }
-
-    function getRoyalties(uint256 tokenId) external view returns (RoyaltyInfo[] memory) {
-        return royaltyRecipients[tokenId];
-    }
-
-    // ── Discount Management ───────────────────────────────────────────────────
-
-    function addPoapDiscount(uint256 tokenId, uint256 eventId, uint256 discountBps) external onlyRole(ADMIN_ROLE) {
-        require(discountBps > 0, "discount must be > 0");
-        require(discountBps <= ROYALTY_DENOMINATOR, "discount exceeds 100%");
-        poapDiscounts[tokenId].push(PoapDiscount({ eventId: eventId, discountBps: discountBps, active: true }));
-        emit PoapDiscountAdded(tokenId, eventId, discountBps);
-    }
-
-    function removePoapDiscount(uint256 tokenId, uint256 index) external onlyRole(ADMIN_ROLE) {
-        PoapDiscount[] storage discounts = poapDiscounts[tokenId];
-        require(index < discounts.length, "invalid index");
-        uint256 eventId = discounts[index].eventId;
-        discounts[index] = discounts[discounts.length - 1];
-        discounts.pop();
-        emit PoapDiscountRemoved(tokenId, eventId);
-    }
-
-    function getPoapDiscounts(uint256 tokenId) external view returns (PoapDiscount[] memory) {
-        return poapDiscounts[tokenId];
-    }
-
-    function addPoapWhitelist(uint256 tokenId, uint256 eventId, address[] calldata addresses) external onlyRole(ADMIN_ROLE) {
-        require(addresses.length > 0, "empty addresses");
-        for (uint256 i = 0; i < addresses.length; i++) {
-            poapWhitelist[tokenId][eventId][addresses[i]] = true;
-        }
-        emit PoapWhitelistUpdated(tokenId, eventId, addresses, true);
-    }
-
-    function removePoapWhitelist(uint256 tokenId, uint256 eventId, address[] calldata addresses) external onlyRole(ADMIN_ROLE) {
-        require(addresses.length > 0, "empty addresses");
-        for (uint256 i = 0; i < addresses.length; i++) {
-            poapWhitelist[tokenId][eventId][addresses[i]] = false;
-        }
-        emit PoapWhitelistUpdated(tokenId, eventId, addresses, false);
-    }
-
-    function isPoapWhitelisted(uint256 tokenId, uint256 eventId, address buyer) external view returns (bool) {
-        return poapWhitelist[tokenId][eventId][buyer];
-    }
-
-    function addHolderDiscount(uint256 tokenId, address token, DiscountType discountType, uint256 value) external onlyRole(ADMIN_ROLE) {
-        require(token != address(0), "invalid token");
-        require(value > 0, "value must be > 0");
-        if (discountType == DiscountType.Percentage) {
-            require(value <= ROYALTY_DENOMINATOR, "discount exceeds 100%");
-        }
-        holderDiscounts[tokenId].push(HolderDiscount({ token: token, discountType: discountType, value: value, active: true }));
-        emit HolderDiscountAdded(tokenId, token, discountType, value);
-    }
-
-    function removeHolderDiscount(uint256 tokenId, uint256 index) external onlyRole(ADMIN_ROLE) {
-        HolderDiscount[] storage discounts = holderDiscounts[tokenId];
-        require(index < discounts.length, "invalid index");
-        address token = discounts[index].token;
-        discounts[index] = discounts[discounts.length - 1];
-        discounts.pop();
-        emit HolderDiscountRemoved(tokenId, token);
-    }
-
-    function getHolderDiscounts(uint256 tokenId) external view returns (HolderDiscount[] memory) {
-        return holderDiscounts[tokenId];
-    }
+    // ── Channel 1: buy on-chain ───────────────────────────────────────────────
 
     /**
-     * @notice Calculate the discounted price for a buyer paying with a specific token.
-     * @param tokenId      Variant token ID
-     * @param buyer        Buyer address (used to check POAP whitelist and token holdings)
-     * @param paymentToken Payment token address (or ETH_TOKEN for native ETH)
-     * @return finalPrice  Price after all applicable discounts, in paymentToken's base units
+     * @notice Buy from the on-chain allocation, paying in an accepted token.
+     * @dev Proceeds go straight to the treasury. There is no split and no
+     *      balance held here, so the contract never has custody of revenue.
      */
-    function getDiscountedPrice(uint256 tokenId, address buyer, address paymentToken)
-        public view
-        returns (uint256 finalPrice)
+    function buy(uint256 tokenId, uint256 quantity, address paymentToken)
+        external
+        payable
+        nonReentrant
+        whenNotPaused
     {
-        uint256 basePrice = variantTokenPrice[tokenId][paymentToken];
-        if (basePrice == 0) return 0;
+        Variant storage v = variants[tokenId];
+        if (v.onchainCap == 0 && v.voucherCap == 0) revert VariantNotFound(tokenId);
+        if (!v.active) revert VariantNotActive(tokenId);
+        if (quantity == 0) revert ZeroQuantity();
 
-        uint256 totalDiscountBps = 0;
-        uint256 fixedDiscount    = 0;
+        uint256 left = v.onchainCap - v.onchainMinted;
+        if (quantity > left) revert SoldOut(tokenId, left);
 
-        // POAP discounts (additive) — address whitelist
-        PoapDiscount[] storage poaps = poapDiscounts[tokenId];
-        for (uint256 i = 0; i < poaps.length; i++) {
-            if (!poaps[i].active) continue;
-            if (poapWhitelist[tokenId][poaps[i].eventId][buyer]) {
-                totalDiscountBps += poaps[i].discountBps;
-            }
+        if (!_variantPaymentTokens[tokenId].contains(paymentToken)) {
+            revert PaymentTokenNotAccepted(tokenId, paymentToken);
         }
 
-        // Holder discounts (additive)
-        HolderDiscount[] storage holders = holderDiscounts[tokenId];
-        for (uint256 i = 0; i < holders.length; i++) {
-            if (!holders[i].active) continue;
-            uint256 balance;
-            try IERC721(holders[i].token).balanceOf(buyer) returns (uint256 bal) {
-                balance = bal;
-            } catch {
-                try IERC20(holders[i].token).balanceOf(buyer) returns (uint256 bal) {
-                    balance = bal;
-                } catch { continue; }
-            }
-            if (balance > 0) {
-                if (holders[i].discountType == DiscountType.Percentage) {
-                    totalDiscountBps += holders[i].value;
-                } else {
-                    fixedDiscount += holders[i].value;
-                }
-            }
+        uint256 total = variantTokenPrice[tokenId][paymentToken] * quantity;
+
+        // Effects before the external calls.
+        v.onchainMinted += uint128(quantity);
+        _assignSerials(tokenId, msg.sender, quantity);
+
+        if (paymentToken == ETH_TOKEN) {
+            if (msg.value != total) revert IncorrectEthAmount(total, msg.value);
+            (bool ok, ) = payable(treasury).call{value: total}("");
+            if (!ok) revert EthTransferFailed();
+        } else {
+            if (msg.value != 0) revert EthNotAccepted();
+            // safeTransferFrom, not transferFrom: a token that returns false
+            // instead of reverting would otherwise hand out free merch.
+            IERC20(paymentToken).safeTransferFrom(msg.sender, treasury, total);
         }
 
-        // Apply percentage discounts (cap at 100%)
-        if (totalDiscountBps >= ROYALTY_DENOMINATOR) return 0;
-        uint256 percentOff = (basePrice * totalDiscountBps) / ROYALTY_DENOMINATOR;
-        finalPrice = basePrice - percentOff;
+        _mint(msg.sender, tokenId, quantity, "");
 
-        // Apply fixed discounts (floor at 0)
-        finalPrice = finalPrice > fixedDiscount ? finalPrice - fixedDiscount : 0;
+        emit Purchased(tokenId, msg.sender, quantity, paymentToken, total);
+    }
+
+    // ── Channel 2: claim a Shopify order ──────────────────────────────────────
+
+    /**
+     * @notice Claim merch already paid for on Shopify, using a backend-signed voucher.
+     * @dev The signature must come from a SIGNER_ROLE holder. `orderRef` is
+     *      burned on use, so a replayed webhook cannot mint twice.
+     */
+    function claim(ClaimVoucher calldata voucher, bytes calldata signature)
+        external
+        nonReentrant
+        whenNotPaused
+    {
+        if (block.timestamp > voucher.deadline) revert VoucherExpired(voucher.deadline);
+        if (orderClaimed[voucher.orderRef]) revert VoucherAlreadyClaimed(voucher.orderRef);
+        if (voucher.quantity == 0) revert ZeroQuantity();
+        if (voucher.to == address(0)) revert InvalidRecipient();
+
+        Variant storage v = variants[voucher.tokenId];
+        if (v.onchainCap == 0 && v.voucherCap == 0) revert VariantNotFound(voucher.tokenId);
+        if (!v.active) revert VariantNotActive(voucher.tokenId);
+
+        uint256 left = v.voucherCap - v.voucherMinted;
+        if (voucher.quantity > left) revert SoldOut(voucher.tokenId, left);
+
+        address signer = ECDSA.recover(_hashVoucher(voucher), signature);
+        if (!hasRole(SIGNER_ROLE, signer)) revert InvalidSignature();
+
+        orderClaimed[voucher.orderRef] = true;
+        v.voucherMinted += uint128(voucher.quantity);
+        _assignSerials(voucher.tokenId, voucher.to, voucher.quantity);
+
+        _mint(voucher.to, voucher.tokenId, voucher.quantity, "");
+
+        emit Claimed(voucher.tokenId, voucher.to, voucher.quantity, voucher.orderRef);
+    }
+
+    /// @notice The EIP-712 digest a backend must sign for `voucher`.
+    function hashVoucher(ClaimVoucher calldata voucher) external view returns (bytes32) {
+        return _hashVoucher(voucher);
+    }
+
+    function _hashVoucher(ClaimVoucher calldata voucher) internal view returns (bytes32) {
+        return _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    CLAIM_TYPEHASH,
+                    voucher.tokenId,
+                    voucher.to,
+                    voucher.quantity,
+                    voucher.orderRef,
+                    voucher.deadline
+                )
+            )
+        );
+    }
+
+    // ── Internal ──────────────────────────────────────────────────────────────
+
+    function _assignSerials(uint256 tokenId, address owner, uint256 quantity) internal {
+        uint256 next = nextSerial[tokenId];
+        for (uint256 i; i < quantity; i++) {
+            serialOwner[tokenId][next + i] = owner;
+        }
+        nextSerial[tokenId] = next + quantity;
     }
 
     // ── Views ─────────────────────────────────────────────────────────────────
-
-    function remaining(uint256 tokenId) public view returns (uint256) {
-        Variant memory v = variants[tokenId];
-        if (v.maxSupply <= v.minted) return 0;
-        return v.maxSupply - v.minted;
-    }
 
     function getVariant(uint256 tokenId) external view returns (Variant memory) {
         return variants[tokenId];
     }
 
     function listTokenIds() external view returns (uint256[] memory) {
-        return _tokenIds.values();
+        return _tokenIds;
+    }
+
+    /// @notice Units still buyable on-chain.
+    function remainingOnchain(uint256 tokenId) public view returns (uint256) {
+        Variant storage v = variants[tokenId];
+        return v.onchainCap - v.onchainMinted;
+    }
+
+    /// @notice Units still claimable against a Shopify voucher.
+    function remainingVoucher(uint256 tokenId) public view returns (uint256) {
+        Variant storage v = variants[tokenId];
+        return v.voucherCap - v.voucherMinted;
+    }
+
+    function totalMinted(uint256 tokenId) external view returns (uint256) {
+        Variant storage v = variants[tokenId];
+        return uint256(v.onchainMinted) + uint256(v.voucherMinted);
     }
 
     function getSerialOwner(uint256 tokenId, uint256 serial) external view returns (address) {
@@ -466,203 +445,71 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard {
     }
 
     function uri(uint256 tokenId) public view override returns (string memory) {
-        string memory tokenURI = _tokenURIs[tokenId];
-        if (bytes(tokenURI).length > 0) return tokenURI;
-        return super.uri(tokenId);
+        string memory custom = _tokenURIs[tokenId];
+        return bytes(custom).length > 0 ? custom : super.uri(tokenId);
     }
-
-    function getRedemptionStatus(uint256 tokenId, address owner) external view returns (RedemptionStatus) {
-        return redemptions[tokenId][owner];
-    }
-
-    // ── Redemption ────────────────────────────────────────────────────────────
-
-    function redeem(uint256 tokenId) external {
-        require(balanceOf(msg.sender, tokenId) > 0, "not owner");
-        require(redemptions[tokenId][msg.sender] == RedemptionStatus.NotRedeemed, "already redeemed");
-        redemptions[tokenId][msg.sender] = RedemptionStatus.PendingFulfillment;
-        emit RedemptionRequested(msg.sender, tokenId);
-    }
-
-    function markFulfilled(uint256 tokenId, address owner) external onlyRole(ADMIN_ROLE) {
-        require(redemptions[tokenId][owner] == RedemptionStatus.PendingFulfillment, "not pending");
-        redemptions[tokenId][owner] = RedemptionStatus.Fulfilled;
-        emit RedemptionFulfilled(owner, tokenId, msg.sender);
-    }
-
-    // ── Purchases ─────────────────────────────────────────────────────────────
 
     /**
-     * @notice Purchase a single variant.
-     * @param tokenId       Variant to purchase
-     * @param quantity      Number of units
-     * @param paymentToken  Token to pay with (ERC-20 address or ETH_TOKEN for native ETH)
-     *
-     * For ERC-20: caller must have approved this contract for the total discounted amount.
-     * For ETH:    caller must send >= total discounted amount as msg.value; excess is refunded.
+     * @notice Whether a purchase would succeed right now, and why not if it would not.
+     * @dev Mirrors every check in buy() except the buyer's balance and
+     *      allowance, which are wallet state rather than contract state.
      */
-    function buy(uint256 tokenId, uint256 quantity, address paymentToken) external payable nonReentrant {
-        require(quantity > 0, "invalid quantity");
+    function canBuy(uint256 tokenId, uint256 quantity, address paymentToken)
+        external
+        view
+        returns (bool allowed, string memory reason)
+    {
         Variant storage v = variants[tokenId];
-        require(v.active, "variant inactive");
-        require(v.minted + quantity <= v.maxSupply, "exceeds supply");
-        require(variantTokenPrice[tokenId][paymentToken] > 0, "token not accepted");
-
-        if (paymentToken != ETH_TOKEN) {
-            require(msg.value == 0, "ETH not accepted for ERC20 payment");
+        if (v.onchainCap == 0 && v.voucherCap == 0) return (false, "Variant does not exist");
+        if (paused()) return (false, "Sales are paused");
+        if (!v.active) return (false, "Variant not active");
+        if (quantity == 0) return (false, "Quantity must be greater than zero");
+        if (quantity > v.onchainCap - v.onchainMinted) return (false, "Sold out on-chain");
+        if (!_variantPaymentTokens[tokenId].contains(paymentToken)) {
+            return (false, "Payment token not accepted");
         }
-
-        uint256 unitPrice = getDiscountedPrice(tokenId, msg.sender, paymentToken);
-        uint256 total     = unitPrice * quantity;
-
-        if (paymentToken == ETH_TOKEN) {
-            require(msg.value >= total, "insufficient ETH");
-            if (total > 0) _distributePaymentETH(tokenId, total);
-            uint256 excess = msg.value - total;
-            if (excess > 0) {
-                (bool ok,) = msg.sender.call{value: excess}("");
-                require(ok, "ETH refund failed");
-            }
-        } else {
-            if (total > 0) _distributePaymentERC20(tokenId, total, paymentToken);
-        }
-
-        v.minted += quantity;
-        _mint(msg.sender, tokenId, quantity, "");
-
-        for (uint256 s = 0; s < quantity; s++) {
-            uint256 serial = ++nextSerial[tokenId];
-            serialOwner[tokenId][serial] = msg.sender;
-            emit SerialMinted(msg.sender, tokenId, serial);
-        }
-
-        emit Purchased(msg.sender, tokenId, quantity, paymentToken, unitPrice, total);
-        if (unitPrice < variantTokenPrice[tokenId][paymentToken]) {
-            emit DiscountApplied(msg.sender, tokenId, paymentToken, variantTokenPrice[tokenId][paymentToken], unitPrice);
-        }
+        return (true, "");
     }
 
-    /**
-     * @notice Purchase multiple variants in one transaction.
-     *         All items in the batch must use the same paymentToken.
-     */
-    function buyBatch(
-        uint256[] calldata tokenIds,
-        uint256[] calldata quantities,
-        address paymentToken
-    ) external payable nonReentrant {
-        require(tokenIds.length == quantities.length, "length mismatch");
-        uint256 len = tokenIds.length;
-        require(len > 0, "empty batch");
-        require(variantTokenPrice[tokenIds[0]][paymentToken] > 0, "token not accepted");
+    /// @notice Whether a voucher would be claimable right now.
+    function canClaim(ClaimVoucher calldata voucher, bytes calldata signature)
+        external
+        view
+        returns (bool allowed, string memory reason)
+    {
+        if (block.timestamp > voucher.deadline) return (false, "Voucher expired");
+        if (orderClaimed[voucher.orderRef]) return (false, "Order already claimed");
+        if (voucher.quantity == 0) return (false, "Quantity must be greater than zero");
+        if (voucher.to == address(0)) return (false, "Invalid recipient");
 
-        if (paymentToken != ETH_TOKEN) {
-            require(msg.value == 0, "ETH not accepted for ERC20 payment");
+        Variant storage v = variants[voucher.tokenId];
+        if (v.onchainCap == 0 && v.voucherCap == 0) return (false, "Variant does not exist");
+        if (paused()) return (false, "Claims are paused");
+        if (!v.active) return (false, "Variant not active");
+        if (voucher.quantity > v.voucherCap - v.voucherMinted) {
+            return (false, "No voucher allocation left");
         }
 
-        uint256 grandTotal = 0;
-        for (uint256 i = 0; i < len; i++) {
-            uint256 tid = tokenIds[i];
-            uint256 qty = quantities[i];
-            require(qty > 0, "invalid quantity");
-            Variant storage v = variants[tid];
-            require(v.active, "variant inactive");
-            require(v.minted + qty <= v.maxSupply, "exceeds supply");
-            require(variantTokenPrice[tid][paymentToken] > 0, "token not accepted");
-            uint256 unitPrice = getDiscountedPrice(tid, msg.sender, paymentToken);
-            grandTotal += unitPrice * qty;
-        }
+        (address signer, ECDSA.RecoverError err, ) = ECDSA.tryRecover(_hashVoucher(voucher), signature);
+        if (err != ECDSA.RecoverError.NoError) return (false, "Malformed signature");
+        if (!hasRole(SIGNER_ROLE, signer)) return (false, "Voucher not signed by an authorised signer");
 
-        if (paymentToken == ETH_TOKEN) {
-            require(msg.value >= grandTotal, "insufficient ETH");
-        }
-
-        // Distribute per-item (preserves royalty splits per tokenId)
-        for (uint256 i = 0; i < len; i++) {
-            uint256 tid       = tokenIds[i];
-            uint256 qty       = quantities[i];
-            uint256 unitPrice = getDiscountedPrice(tid, msg.sender, paymentToken);
-            uint256 itemTotal = unitPrice * qty;
-            if (itemTotal > 0) {
-                if (paymentToken == ETH_TOKEN) {
-                    _distributePaymentETH(tid, itemTotal);
-                } else {
-                    _distributePaymentERC20(tid, itemTotal, paymentToken);
-                }
-            }
-        }
-
-        // Update supply and mint
-        for (uint256 i = 0; i < len; i++) {
-            variants[tokenIds[i]].minted += quantities[i];
-        }
-        _mintBatch(msg.sender, tokenIds, quantities, "");
-
-        // Assign serial numbers
-        for (uint256 i = 0; i < len; i++) {
-            for (uint256 s = 0; s < quantities[i]; s++) {
-                uint256 serial = ++nextSerial[tokenIds[i]];
-                serialOwner[tokenIds[i]][serial] = msg.sender;
-                emit SerialMinted(msg.sender, tokenIds[i], serial);
-            }
-        }
-
-        // Refund excess ETH
-        if (paymentToken == ETH_TOKEN && msg.value > grandTotal) {
-            (bool ok,) = msg.sender.call{value: msg.value - grandTotal}("");
-            require(ok, "ETH refund failed");
-        }
-
-        emit PurchasedBatch(msg.sender, tokenIds, quantities, paymentToken, grandTotal);
+        return (true, "");
     }
 
-    // ── Internal: Payment Distribution ───────────────────────────────────────
+    // ── Required overrides ────────────────────────────────────────────────────
 
-    /**
-     * @dev Distribute native ETH: royalties to recipients, remainder to treasury.
-     *      ETH must already be held by this contract (sent via buy/buyBatch msg.value).
-     */
-    function _distributePaymentETH(uint256 tokenId, uint256 total) internal {
-        uint256 royaltyPaid = 0;
-        RoyaltyInfo[] storage recipients = royaltyRecipients[tokenId];
-        for (uint256 i = 0; i < recipients.length; i++) {
-            uint256 amount = (total * recipients[i].percentage) / ROYALTY_DENOMINATOR;
-            if (amount > 0) {
-                (bool ok,) = recipients[i].recipient.call{value: amount}("");
-                require(ok, "ETH royalty transfer failed");
-                royaltyPaid += amount;
-            }
-        }
-        uint256 treasuryAmount = total - royaltyPaid;
-        if (treasuryAmount > 0) {
-            (bool ok,) = treasury.call{value: treasuryAmount}("");
-            require(ok, "ETH treasury transfer failed");
-        }
-    }
-
-    /**
-     * @dev Distribute ERC-20: royalties to recipients, remainder to treasury.
-     *      Uses transferFrom — caller must have approved this contract.
-     */
-    function _distributePaymentERC20(uint256 tokenId, uint256 total, address token) internal {
-        uint256 royaltyPaid = 0;
-        RoyaltyInfo[] storage recipients = royaltyRecipients[tokenId];
-        for (uint256 i = 0; i < recipients.length; i++) {
-            uint256 amount = (total * recipients[i].percentage) / ROYALTY_DENOMINATOR;
-            if (amount > 0) {
-                IERC20(token).transferFrom(msg.sender, recipients[i].recipient, amount);
-                royaltyPaid += amount;
-            }
-        }
-        uint256 treasuryAmount = total - royaltyPaid;
-        if (treasuryAmount > 0) {
-            IERC20(token).transferFrom(msg.sender, treasury, treasuryAmount);
-        }
-    }
-
-    // ── Required Overrides ────────────────────────────────────────────────────
-
-    function supportsInterface(bytes4 interfaceId) public view override(ERC1155, AccessControl) returns (bool) {
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC1155, AccessControl)
+        returns (bool)
+    {
         return super.supportsInterface(interfaceId);
+    }
+
+    /// @dev Merch is bought, not airdropped. Bare ETH would be unattributable.
+    receive() external payable {
+        revert DirectEthNotAccepted();
     }
 }

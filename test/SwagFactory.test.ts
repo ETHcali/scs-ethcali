@@ -24,19 +24,22 @@ describe("SwagFactory", async function () {
     return [
       {
         metadataURI: "ipfs://QmSmall/metadata.json",
-        maxSupply: 50n,
+        onchainCap: 25n,
+        voucherCap: 25n,
         active: true,
         payments: [{ token: usdc.address, price: USDC(25) }],
       },
       {
         metadataURI: "ipfs://QmMedium/metadata.json",
-        maxSupply: 100n,
+        onchainCap: 50n,
+        voucherCap: 50n,
         active: true,
         payments: [{ token: usdc.address, price: USDC(25) }],
       },
       {
         metadataURI: "ipfs://QmLarge/metadata.json",
-        maxSupply: 75n,
+        onchainCap: 37n,
+        voucherCap: 38n,
         active: true,
         payments: [{ token: usdc.address, price: USDC(30) }],
       },
@@ -137,32 +140,35 @@ describe("SwagFactory", async function () {
 
   // ── Deployed Swag1155 state ─────────────────────────────────────────────────
 
-  it("deployed Swag1155 tokenId 1 has correct price and maxSupply", async function () {
+  it("deployed Swag1155 tokenId 1 has correct price and split supply", async function () {
     const [addr] = await factory.read.getCollections();
     const swag = await viem.getContractAt("Swag1155", addr);
 
     const v = await swag.read.getVariant([1n]);
-    assert.equal(v.maxSupply, 50n);
+    assert.equal(v.onchainCap, 25n);
+    assert.equal(v.voucherCap, 25n);
     assert.equal(v.active, true);
     assert.equal(await swag.read.getTokenPrice([1n, usdc.address]), USDC(25));
   });
 
-  it("deployed Swag1155 tokenId 2 has correct price and maxSupply", async function () {
+  it("deployed Swag1155 tokenId 2 has correct price and split supply", async function () {
     const [addr] = await factory.read.getCollections();
     const swag = await viem.getContractAt("Swag1155", addr);
 
     const v = await swag.read.getVariant([2n]);
-    assert.equal(v.maxSupply, 100n);
+    assert.equal(v.onchainCap, 50n);
+    assert.equal(v.voucherCap, 50n);
     assert.equal(v.active, true);
     assert.equal(await swag.read.getTokenPrice([2n, usdc.address]), USDC(25));
   });
 
-  it("deployed Swag1155 tokenId 3 has correct price and maxSupply", async function () {
+  it("deployed Swag1155 tokenId 3 has correct price and split supply", async function () {
     const [addr] = await factory.read.getCollections();
     const swag = await viem.getContractAt("Swag1155", addr);
 
     const v = await swag.read.getVariant([3n]);
-    assert.equal(v.maxSupply, 75n);
+    assert.equal(v.onchainCap, 37n);
+    assert.equal(v.voucherCap, 38n);
     assert.equal(v.active, true);
     assert.equal(await swag.read.getTokenPrice([3n, usdc.address]), USDC(30));
   });
@@ -192,7 +198,7 @@ describe("SwagFactory", async function () {
           treasury.account.address,
           deployer.account.address,
         ]),
-      /already initialized/
+      /AlreadyInitialized/
     );
   });
 
@@ -240,7 +246,7 @@ describe("SwagFactory", async function () {
     const swag = await viem.getContractAt("Swag1155", addr);
 
     // tokenId 4 = XL — itemAdmin creates it directly, then prices it.
-    await swag.write.setVariantWithURI([4n, 25n, true, "ipfs://QmXL/metadata.json"], {
+    await swag.write.setVariantWithURI([4n, 15n, 10n, true, "ipfs://QmXL/metadata.json"], {
       account: itemAdmin.account,
     });
     await swag.write.setPaymentOption([4n, usdc.address, USDC(35)], {
@@ -248,7 +254,8 @@ describe("SwagFactory", async function () {
     });
 
     const v = await swag.read.getVariant([4n]);
-    assert.equal(v.maxSupply, 25n);
+    assert.equal(v.onchainCap, 15n);
+    assert.equal(v.voucherCap, 10n);
     assert.equal(await swag.read.getTokenPrice([4n, usdc.address]), USDC(35));
   });
 
@@ -258,7 +265,7 @@ describe("SwagFactory", async function () {
 
     await assert.rejects(
       () =>
-        swag.write.setVariantWithURI([9n, 5n, true, "ipfs://QmNope/metadata.json"], {
+        swag.write.setVariantWithURI([9n, 3n, 2n, true, "ipfs://QmNope/metadata.json"], {
           account: buyer.account,
         }),
       /AccessControlUnauthorizedAccount/
@@ -295,7 +302,7 @@ describe("SwagFactory", async function () {
 
     await assert.rejects(
       () => swag.write.buy([1n, 1n, other.address], { account: buyer.account }),
-      /token not accepted/
+      /PaymentTokenNotAccepted/
     );
   });
 
@@ -336,7 +343,8 @@ describe("SwagFactory", async function () {
       [
         {
           metadataURI: "ipfs://QmTeeS/metadata.json",
-          maxSupply: 200n,
+          onchainCap: 100n,
+          voucherCap: 100n,
           active: true,
           payments: [{ token: usdc.address, price: USDC(15) }],
         },
@@ -356,8 +364,10 @@ describe("SwagFactory", async function () {
     // Tee   tokenId 1 = S at 15 USDC / supply 200
     const v1 = await swag1.read.getVariant([1n]);
     const v2 = await swag2.read.getVariant([1n]);
-    assert.equal(v1.maxSupply, 50n);
-    assert.equal(v2.maxSupply, 200n);
+    assert.equal(v1.onchainCap, 25n);
+    assert.equal(v1.voucherCap, 25n);
+    assert.equal(v2.onchainCap, 100n);
+    assert.equal(v2.voucherCap, 100n);
     assert.equal(await swag1.read.getTokenPrice([1n, usdc.address]), USDC(25));
     assert.equal(await swag2.read.getTokenPrice([1n, usdc.address]), USDC(15));
   });
@@ -416,7 +426,8 @@ describe("SwagFactory", async function () {
         [
           {
             metadataURI: "ipfs://QmCapOneSize/metadata.json",
-            maxSupply: 150n,
+            onchainCap: 75n,
+            voucherCap: 75n,
             active: true,
             payments: [{ token: usdc.address, price: USDC(20) }],
           },
@@ -534,7 +545,8 @@ describe("SwagFactory", async function () {
           [
             {
               metadataURI: "ipfs://QmNoPay/metadata.json",
-              maxSupply: 10n,
+              onchainCap: 5n,
+              voucherCap: 5n,
               active: true,
               payments: [],
             },
