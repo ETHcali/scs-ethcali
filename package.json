@@ -26,7 +26,10 @@
     "deploy:donations:base": "hardhat run scripts/deploy-donations.ts --network base",
     "seed:swag": "hardhat run scripts/seed-swag.ts",
     "seed:swag:dry": "DRY_RUN=1 hardhat run scripts/seed-swag.ts",
-    "seed:campaign:celo": "hardhat run scripts/seed-campaign.ts --network celo"
+    "seed:campaign:celo": "hardhat run scripts/seed-campaign.ts --network celo",
+    "deploy:donations:optimism": "hardhat run scripts/deploy-donations.ts --network optimism",
+    "seed:campaign:optimism": "hardhat run scripts/seed-campaign.ts --network optimism",
+    "estimate:donations:optimism": "node scripts/estimate-deploy-cost.mjs optimism donations"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^3.0.6",
