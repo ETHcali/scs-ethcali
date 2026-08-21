@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000" role="img" aria-label="ETH Cali donation receipt, Guardian tier">
+  <defs>
+    <radialGradient id="halo" cx="50%" cy="44%" r="58%">
+      <stop offset="0" stop-color="#2B23EF" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#2B23EF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1000" height="1000" fill="#06060B"/>
+  <rect width="1000" height="1000" fill="url(#halo)"/>
+
+  <!-- Guardian differs from Supporter by structure, never by colour: a third
+       ring and heavier ironwork. The brand allows exactly one chromatic hue. -->
+  <g fill="none" stroke="#2B23EF" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M500 128 L768 500 L500 872 L232 500 Z" stroke-width="9"/>
+    <path d="M500 232 L690 500 L500 768 L310 500 Z" stroke-width="5.5" opacity="0.82"/>
+    <path d="M500 336 L612 500 L500 664 L388 500 Z" stroke-width="3.5" opacity="0.6"/>
+    <g stroke-width="2.5" opacity="0.42">
+      <path d="M500 128 L500 336"/>
+      <path d="M768 500 L612 500"/>
+      <path d="M500 872 L500 664"/>
+      <path d="M232 500 L388 500"/>
+    </g>
+  </g>
+
+  <text x="500" y="120" fill="#9A9DAE" font-family="JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="26" letter-spacing="4.2" text-anchor="middle">ETH CALI</text>
+
+  <text x="500" y="932" fill="#F2F3F7" font-family="Inter, Helvetica Neue, Arial, sans-serif"
+        font-size="62" font-weight="700" letter-spacing="-1.2" text-anchor="middle">Guardian</text>
+
+  <text x="500" y="972" fill="#5F6377" font-family="JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="20" letter-spacing="3" text-anchor="middle">DONATION RECEIPT</text>
+</svg>
