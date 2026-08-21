@@ -38,6 +38,31 @@ const CHAIN_ID_TO_NETWORK: Record<number, string> = {
 
 const DEFAULT_ADMIN_ROLE = ("0x" + "00".repeat(32)) as `0x${string}`;
 
+/**
+ * Reference token addresses recorded alongside a deployment, per chain.
+ *
+ * Metadata only — the vault learns which tokens it accepts from
+ * seed-campaign.ts, never from this record. It was hardcoded to the Celo
+ * env vars, which silently stamped Celo's USDC onto every other chain.
+ */
+function tokensForChain(chainId: number): Record<string, string> {
+  switch (chainId) {
+    case 42220:
+      return {
+        usdc: process.env.USDC_ADDRESS_CELO || "",
+        copm: process.env.COPM_ADDRESS_CELO || "",
+      };
+    case 8453:
+      return { usdc: process.env.USDC_ADDRESS_BASE || "" };
+    case 10:
+      return { usdc: process.env.USDC_ADDRESS_OP || "" };
+    case 1:
+      return { usdc: process.env.USDC_ADDRESS_ETH || "" };
+    default:
+      return {};
+  }
+}
+
 async function main() {
   console.log("═══════════════════════════════════════════════════════════");
   console.log("           ETHCALI DONATION CONTRACTS DEPLOYMENT");
@@ -202,8 +227,7 @@ async function main() {
       beneficiary,
       opsAdmins,
       custodyTransferred,
-      usdc: process.env.USDC_ADDRESS_CELO || "",
-      copm: process.env.COPM_ADDRESS_CELO || "",
+      ...tokensForChain(chainId),
     },
   };
 

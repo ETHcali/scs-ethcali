@@ -29,7 +29,14 @@
     "seed:campaign:celo": "hardhat run scripts/seed-campaign.ts --network celo",
     "deploy:donations:optimism": "hardhat run scripts/deploy-donations.ts --network optimism",
     "seed:campaign:optimism": "hardhat run scripts/seed-campaign.ts --network optimism",
-    "estimate:donations:optimism": "node scripts/estimate-deploy-cost.mjs optimism donations"
+    "estimate:donations:optimism": "node scripts/estimate-deploy-cost.mjs optimism donations",
+    "seed:campaign:base": "hardhat run scripts/seed-campaign.ts --network base",
+    "estimate:donations:base": "node scripts/estimate-deploy-cost.mjs base donations",
+    "deploy:donations:ethereum": "hardhat run scripts/deploy-donations.ts --network ethereum",
+    "seed:campaign:ethereum": "hardhat run scripts/seed-campaign.ts --network ethereum",
+    "estimate:donations:ethereum": "node scripts/estimate-deploy-cost.mjs ethereum donations",
+    "launch:donations": "node scripts/launch-donations.mjs",
+    "launch:donations:go": "DRY_RUN=0 node scripts/launch-donations.mjs"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^3.0.6",

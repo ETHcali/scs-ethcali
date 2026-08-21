@@ -23,7 +23,7 @@ dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const CHAINS = {
+export const CHAINS = {
   celo: { rpc: process.env.CELO_RPC_URL || 'https://forno.celo.org', symbol: 'CELO' },
   base: { rpc: process.env.BASE_RPC_URL || 'https://base-rpc.publicnode.com', symbol: 'ETH' },
   optimism: { rpc: process.env.OPTIMISM_RPC_URL || 'https://optimism-rpc.publicnode.com', symbol: 'ETH' },
@@ -67,7 +67,7 @@ function buildPlan(scope) {
   ];
 }
 
-async function estimateChain(name, scope) {
+export async function estimateChain(name, scope) {
   const { rpc, symbol } = CHAINS[name];
   const client = createPublicClient({ transport: http(rpc) });
 
@@ -117,39 +117,46 @@ async function estimateChain(name, scope) {
   return { name, symbol, gasPrice, balance, totalGas, cost, withBuffer, rows, deployerAddress };
 }
 
-const [chainArg, scopeArg] = process.argv.slice(2);
-const scope = scopeArg === 'donations' ? 'donations' : 'full';
-const targets = chainArg ? [chainArg] : Object.keys(CHAINS);
+// Only run the CLI when invoked directly. launch-donations.mjs imports
+// estimateChain() from here so the two never disagree about gas.
+const invokedDirectly =
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
-console.log(`\nPre-deploy gas estimate — scope: ${scope}\n`);
+if (invokedDirectly) {
+  const [chainArg, scopeArg] = process.argv.slice(2);
+  const scope = scopeArg === 'donations' ? 'donations' : 'full';
+  const targets = chainArg ? [chainArg] : Object.keys(CHAINS);
 
-for (const name of targets) {
-  if (!CHAINS[name]) {
-    console.log(`unknown chain: ${name}`);
-    continue;
-  }
+  console.log(`\nPre-deploy gas estimate — scope: ${scope}\n`);
 
-  try {
-    const r = await estimateChain(name, scope);
-
-    console.log(`── ${name} ${'─'.repeat(Math.max(0, 46 - name.length))}`);
-    for (const [label, gas] of r.rows) {
-      console.log(`   ${label.padEnd(28)} ${String(gas).padStart(9)} gas`);
+  for (const name of targets) {
+    if (!CHAINS[name]) {
+      console.log(`unknown chain: ${name}`);
+      continue;
     }
-    console.log(`   ${'TOTAL'.padEnd(28)} ${String(r.totalGas).padStart(9)} gas`);
-    console.log(`   gas price      : ${(Number(r.gasPrice) / 1e9).toFixed(2)} gwei`);
-    console.log(`   estimated cost : ${formatEther(r.cost)} ${r.symbol}`);
-    console.log(`   with 30% buffer: ${formatEther(r.withBuffer)} ${r.symbol}`);
-    console.log(`   deployer bal   : ${formatEther(r.balance)} ${r.symbol}`);
 
-    const verdict =
-      r.balance >= r.withBuffer
-        ? 'GO'
-        : r.balance >= r.cost
-          ? `TIGHT — top up ${formatEther(r.withBuffer - r.balance)} ${r.symbol} for safe headroom`
-          : `INSUFFICIENT — need ${formatEther(r.withBuffer - r.balance)} ${r.symbol} more`;
-    console.log(`   VERDICT        : ${verdict}\n`);
-  } catch (e) {
-    console.log(`── ${name}: failed — ${e.message}\n`);
+    try {
+      const r = await estimateChain(name, scope);
+
+      console.log(`── ${name} ${'─'.repeat(Math.max(0, 46 - name.length))}`);
+      for (const [label, gas] of r.rows) {
+        console.log(`   ${label.padEnd(28)} ${String(gas).padStart(9)} gas`);
+      }
+      console.log(`   ${'TOTAL'.padEnd(28)} ${String(r.totalGas).padStart(9)} gas`);
+      console.log(`   gas price      : ${(Number(r.gasPrice) / 1e9).toFixed(2)} gwei`);
+      console.log(`   estimated cost : ${formatEther(r.cost)} ${r.symbol}`);
+      console.log(`   with 30% buffer: ${formatEther(r.withBuffer)} ${r.symbol}`);
+      console.log(`   deployer bal   : ${formatEther(r.balance)} ${r.symbol}`);
+
+      const verdict =
+        r.balance >= r.withBuffer
+          ? 'GO'
+          : r.balance >= r.cost
+            ? `TIGHT — top up ${formatEther(r.withBuffer - r.balance)} ${r.symbol} for safe headroom`
+            : `INSUFFICIENT — need ${formatEther(r.withBuffer - r.balance)} ${r.symbol} more`;
+      console.log(`   VERDICT        : ${verdict}\n`);
+    } catch (e) {
+      console.log(`── ${name}: failed — ${e.message}\n`);
+    }
   }
 }
