@@ -28,12 +28,14 @@
  *   4. seed the campaign (idempotent on its own).
  */
 import { createPublicClient, http, formatEther, getAddress } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { CHAINS, estimateChain } from './estimate-deploy-cost.mjs';
+import { SINGLETON_FACTORY, donationSalt, predictDonationAddresses } from './deterministic.mjs';
 
 dotenv.config();
 
@@ -58,9 +60,21 @@ const keepGoing = flags.has('--keep-going');
 const writeAddresses = !flags.has('--no-write-addresses');
 
 const beneficiary = process.env.DONATION_BENEFICIARY || '';
+const deterministic = process.env.DETERMINISTIC !== '0';
+
+/** The deployer is baked into the constructor args, so it decides the address. */
+function deployerAddress() {
+  if (process.env.DEPLOYER_ADDRESS) return process.env.DEPLOYER_ADDRESS;
+  const pk = process.env.PRIVATE_KEY;
+  if (!pk) throw new Error('Set PRIVATE_KEY or DEPLOYER_ADDRESS.');
+  return privateKeyToAccount(pk.startsWith('0x') ? pk : `0x${pk}`).address;
+}
 
 // Colour only for a real terminal — this output gets piped to a launch log.
 const tty = process.stdout.isTTY;
+// Chain-independent by construction: same factory, same salt, same init code.
+const predicted = deterministic ? predictDonationAddresses(deployerAddress()) : null;
+
 const bold = (s) => (tty ? `\x1b[1m${s}\x1b[0m` : s);
 const dim = (s) => (tty ? `\x1b[2m${s}\x1b[0m` : s);
 
@@ -141,14 +155,30 @@ async function runChain(name) {
   console.log(`   beneficiary   : ${beneficiary} ${dim('(has code ✓)')}`);
 
   // 3. Existing deployment?
+  //
+  // In deterministic mode the question is not "does the recorded address have
+  // code" but "does the PREDICTED address have code". Celo's first vault was
+  // deployed with plain CREATE, so its recorded address is live yet still the
+  // wrong one — treating that as done would leave one chain out of the set.
   const record = readRecord(name);
-  const vaultLive = await hasCode(client, record.donationVault);
-  const receiptLive = await hasCode(client, record.donationReceipt);
-  const deployed = vaultLive && receiptLive;
+  const expected = deterministic ? predicted : null;
+
+  const vaultAddr = expected ? expected.DonationVault : record.donationVault;
+  const receiptAddr = expected ? expected.DonationReceipt1155 : record.donationReceipt;
+  const deployed = (await hasCode(client, vaultAddr)) && (await hasCode(client, receiptAddr));
 
   if (deployed) {
-    console.log(`   vault         : ${record.donationVault} ${dim('(already deployed)')}`);
-    console.log(`   receipt       : ${record.donationReceipt} ${dim('(already deployed)')}`);
+    console.log(`   vault         : ${vaultAddr} ${dim('(already deployed)')}`);
+    console.log(`   receipt       : ${receiptAddr} ${dim('(already deployed)')}`);
+  } else if (expected) {
+    console.log(`   vault         : ${vaultAddr} ${dim('(predicted)')}`);
+    console.log(`   receipt       : ${receiptAddr} ${dim('(predicted)')}`);
+    if (record.donationVault && record.donationVault.toLowerCase() !== vaultAddr.toLowerCase()) {
+      console.log(
+        `   ${dim(`note: ${record.donationVault} is already deployed here from an earlier`)}\n` +
+          `   ${dim('non-deterministic run. It will be left in place and superseded.')}`
+      );
+    }
   }
 
   // 4. Gas check — only when there is something to deploy.
@@ -168,9 +198,18 @@ async function runChain(name) {
     if (!dryRun) hardhat('deploy-donations.ts', name);
   }
 
+  // A dry run before the deploy has nothing to read state from — the predicted
+  // address is still empty, so the seed cannot be previewed, only announced.
+  if (!deployed && dryRun) {
+    return { name, status: 'PLANNED — deploy, then seed', vault: vaultAddr, receipt: receiptAddr };
+  }
+
   // 5. Addresses to seed against. On a dry run with nothing deployed there is
   //    no vault to read, so the seed step cannot be previewed.
-  const after = readRecord(name);
+  const rec = readRecord(name);
+  const after = expected
+    ? { donationVault: expected.DonationVault, donationReceipt: expected.DonationReceipt1155 }
+    : rec;
   if (!after.donationVault || !after.donationReceipt) {
     return { name, status: dryRun ? 'PLANNED — deploy, then seed' : 'FAILED — no addresses recorded' };
   }
@@ -199,6 +238,11 @@ console.log(bold('\n  ETH CALI — DONATION LAUNCH') + (dryRun ? dim('   (DRY RU
 rule();
 console.log(`  chains      : ${chains.join(', ')}`);
 console.log(`  beneficiary : ${beneficiary || dim('(unset)')}`);
+if (predicted) {
+  console.log(`  salt        : ${donationSalt()}`);
+  console.log(`  vault       : ${predicted.DonationVault}   ${dim('same on every chain')}`);
+  console.log(`  receipt     : ${predicted.DonationReceipt1155}   ${dim('same on every chain')}`);
+}
 console.log(`  mode        : ${dryRun ? 'dry run — nothing will be sent' : bold('LIVE — transactions will be sent')}`);
 
 // Receipt metadata is not required to accept a donation, but without it the

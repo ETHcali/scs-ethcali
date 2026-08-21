@@ -41,6 +41,15 @@ export default defineConfig({
       type: "edr-simulated",
       chainType: "op",
     },
+    // Local fork target — `anvil --fork-url <chain> --port 8545`. Used to
+    // rehearse a mainnet donation launch (CREATE2 addresses, role handoff and
+    // campaign seeding) against real chain state before spending real gas.
+    localhost: {
+      type: "http",
+      chainType: "l1",
+      url: "http://127.0.0.1:8545",
+      accounts: [configVariable("PRIVATE_KEY")],
+    },
     sepolia: {
       type: "http",
       chainType: "l1",

@@ -1,5 +1,12 @@
 import { network } from "hardhat";
 import { formatEther } from "viem";
+import {
+  SINGLETON_FACTORY,
+  donationPlan,
+  donationSalt,
+  factoryCalldata,
+  predictAddress,
+} from "./deterministic.mjs";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
@@ -101,18 +108,75 @@ async function main() {
   }
 
   // ── Deploy ────────────────────────────────────────────────────────────────
+  // CREATE2 by default, so the vault and receipt carry the SAME address on
+  // every chain. DETERMINISTIC=0 falls back to plain CREATE (nonce-derived,
+  // therefore different everywhere).
+  const deterministic = process.env.DETERMINISTIC !== "0";
+
+  const salt = donationSalt();
+  const plan = Object.fromEntries(donationPlan(deployerAddress));
+
+  /**
+   * Deploy through the singleton factory and return a bound contract.
+   *
+   * Idempotent by construction: if the predicted address already has code, the
+   * contract is already there and we attach to it. Re-running after a partial
+   * deploy costs nothing.
+   */
+  const deployVia2 = async (contract: string, args: readonly unknown[]) => {
+    const predicted = predictAddress(contract, args, salt) as `0x${string}`;
+    const already = await publicClient.getBytecode({ address: predicted });
+
+    if (already && already !== "0x") {
+      console.log(`   ↩︎  ${contract} already at ${predicted} — reusing`);
+      return viem.getContractAt(contract as never, predicted);
+    }
+
+    const hash = await deployer.sendTransaction({
+      to: SINGLETON_FACTORY as `0x${string}`,
+      data: factoryCalldata(contract, args, salt) as `0x${string}`,
+    });
+    const rcpt = await publicClient.waitForTransactionReceipt({ hash });
+    if (rcpt.status !== "success") throw new Error(`${contract} CREATE2 reverted (${hash})`);
+
+    // Never trust the factory's word for it. A CREATE2 proxy can mine a
+    // successful transaction and still not have deployed anything; attaching
+    // to an empty address would then fail much later, mid-role-setup.
+    const code = await publicClient.getBytecode({ address: predicted });
+    if (!code || code === "0x") {
+      throw new Error(`${contract}: factory mined ${hash} but ${predicted} has no code`);
+    }
+    console.log(`   ✅ ${predicted}`);
+    return viem.getContractAt(contract as never, predicted);
+  };
+
+  if (deterministic) {
+    const factoryCode = await publicClient.getBytecode({ address: SINGLETON_FACTORY as `0x${string}` });
+    if (!factoryCode || factoryCode === "0x") {
+      throw new Error(
+        `Safe Singleton Factory is not deployed on ${networkName}. ` +
+          `Re-run with DETERMINISTIC=0 to accept a chain-specific address.`
+      );
+    }
+    console.log(`\n🧬 Deterministic deploy — salt ${salt}`);
+  }
+
   console.log("\n📦 Deploying DonationReceipt1155...");
-  const donationReceipt = await viem.deployContract("DonationReceipt1155", [
-    process.env.DONATION_RECEIPT_NAME || "ETH Cali Relief Receipts",
-    process.env.DONATION_RECEIPT_SYMBOL || "ETHCALI-RELIEF",
-    process.env.DONATION_RECEIPT_BASE_URI || "",
-    deployerAddress,
-  ]);
-  console.log(`   ✅ ${donationReceipt.address}`);
+  const donationReceipt = deterministic
+    ? await deployVia2("DonationReceipt1155", plan.DonationReceipt1155)
+    : await viem.deployContract("DonationReceipt1155", [
+        process.env.DONATION_RECEIPT_NAME || "ETH Cali Relief Receipts",
+        process.env.DONATION_RECEIPT_SYMBOL || "ETHCALI-RELIEF",
+        process.env.DONATION_RECEIPT_BASE_URI || "",
+        deployerAddress,
+      ]);
+  if (!deterministic) console.log(`   ✅ ${donationReceipt.address}`);
 
   console.log("\n📦 Deploying DonationVault...");
-  const donationVault = await viem.deployContract("DonationVault", [deployerAddress]);
-  console.log(`   ✅ ${donationVault.address}`);
+  const donationVault = deterministic
+    ? await deployVia2("DonationVault", plan.DonationVault)
+    : await viem.deployContract("DonationVault", [deployerAddress]);
+  if (!deterministic) console.log(`   ✅ ${donationVault.address}`);
 
   /**
    * Send a write and WAIT for the receipt before returning.
@@ -134,6 +198,21 @@ async function main() {
   // emits ReceiptFailed and the donor receives no NFT.
   console.log("\n🔗 Wiring roles...");
   await send("grant vault MINTER_ROLE", () => donationReceipt.write.addMinter([donationVault.address]));
+
+  // A deterministic deploy always constructs the receipt with an EMPTY baseURI
+  // so the address never depends on metadata that is not pinned yet — set it
+  // here instead. Storage, not address: safe to change later, and safe to
+  // differ between chains while the pinning catches up.
+  const configuredBaseURI = process.env.DONATION_RECEIPT_BASE_URI || "";
+  const baseURIIsReal = configuredBaseURI && !configuredBaseURI.includes("YourBaseCid");
+  if (deterministic && baseURIIsReal) {
+    await send(`set receipt baseURI`, () => donationReceipt.write.setBaseURI([configuredBaseURI]));
+  } else if (deterministic && configuredBaseURI) {
+    console.log(
+      `   ⚠️  DONATION_RECEIPT_BASE_URI is still the placeholder — receipt metadata\n` +
+        `       is unset. Pin the JSON, then call setBaseURI(). No redeploy needed.`
+    );
+  }
 
   for (const admin of opsAdmins) {
     if (admin.toLowerCase() === deployerAddress.toLowerCase()) continue;
