@@ -137,11 +137,19 @@ async function main() {
 
       // Only renounce AFTER confirming the multisig actually holds the role —
       // renouncing first would lock the contracts out of custody permanently.
-      const multisigHasVault = await vault.read.isSuperAdmin([custodyAdmin]);
-      const multisigHasReceipt = await receipt.read.hasRole([
-        DEFAULT_ADMIN_ROLE,
-        custodyAdmin,
-      ]);
+      // Poll: a read right after the grant can hit a replica behind the tip,
+      // and a false negative here aborts the handoff.
+      const pollTrue = async (read: () => Promise<boolean>, tries = 10, delayMs = 2000) => {
+        for (let i = 0; i < tries; i++) {
+          if (await read()) return true;
+          if (i < tries - 1) await new Promise((r) => setTimeout(r, delayMs));
+        }
+        return false;
+      };
+      const multisigHasVault = await pollTrue(() => vault.read.isSuperAdmin([custodyAdmin]));
+      const multisigHasReceipt = await pollTrue(() =>
+        receipt.read.hasRole([DEFAULT_ADMIN_ROLE, custodyAdmin])
+      );
 
       if (multisigHasVault && multisigHasReceipt) {
         if (await vault.read.isSuperAdmin([deployerAddress])) {

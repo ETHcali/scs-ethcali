@@ -37,6 +37,47 @@ import dotenv from 'dotenv';
 import { CHAINS, estimateChain } from './estimate-deploy-cost.mjs';
 import { SINGLETON_FACTORY, donationSalt, predictDonationAddresses } from './deterministic.mjs';
 
+const DEFAULT_ADMIN_ROLE = `0x${'00'.repeat(32)}`;
+const WIRING_ABI = [
+  { type: 'function', name: 'isSuperAdmin', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'hasRole', stateMutability: 'view', inputs: [{ type: 'bytes32' }, { type: 'address' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'MINTER_ROLE', stateMutability: 'view', inputs: [], outputs: [{ type: 'bytes32' }] },
+];
+
+/**
+ * Deployed is not the same as wired.
+ *
+ * Celo proved this the hard way: both contracts deployed, then Forno returned
+ * an HTTP error partway through role setup. Code existed at both addresses, so
+ * a code-presence check would have called the chain done and gone straight to
+ * seeding — leaving the deployer holding DEFAULT_ADMIN and the Safe holding
+ * nothing. Custody silently never transferred is the worst failure this script
+ * could produce, so it is checked explicitly.
+ */
+async function wiringComplete(client, vault, receipt, custodyAdmin, deployer) {
+  const read = (address, functionName, args = []) =>
+    client.readContract({ address: getAddress(address), abi: WIRING_ABI, functionName, args });
+  try {
+    const minterRole = await read(receipt, 'MINTER_ROLE');
+    const [minterOk, safeVault, safeReceipt, deployerVault, deployerReceipt] = await Promise.all([
+      read(receipt, 'hasRole', [minterRole, getAddress(vault)]),
+      read(vault, 'isSuperAdmin', [getAddress(custodyAdmin)]),
+      read(receipt, 'hasRole', [DEFAULT_ADMIN_ROLE, getAddress(custodyAdmin)]),
+      read(vault, 'isSuperAdmin', [getAddress(deployer)]),
+      read(receipt, 'hasRole', [DEFAULT_ADMIN_ROLE, getAddress(deployer)]),
+    ]);
+    // The Safe holding custody is not enough — the deployer must have stepped
+    // down. Base stopped exactly here: both held DEFAULT_ADMIN because a stale
+    // read aborted the renounce, and "the Safe has it" would have called that
+    // done while a hot EOA could still redirect donations.
+    const deployerStoodDown =
+      getAddress(deployer) === getAddress(custodyAdmin) || (!deployerVault && !deployerReceipt);
+    return minterOk && safeVault && safeReceipt && deployerStoodDown;
+  } catch {
+    return false;
+  }
+}
+
 dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -60,6 +101,7 @@ const keepGoing = flags.has('--keep-going');
 const writeAddresses = !flags.has('--no-write-addresses');
 
 const beneficiary = process.env.DONATION_BENEFICIARY || '';
+const custodyAdmin = process.env.DONATION_CUSTODY_ADMIN || beneficiary;
 const deterministic = process.env.DETERMINISTIC !== '0';
 
 /** The deployer is baked into the constructor args, so it decides the address. */
@@ -170,6 +212,18 @@ async function runChain(name) {
   if (deployed) {
     console.log(`   vault         : ${vaultAddr} ${dim('(already deployed)')}`);
     console.log(`   receipt       : ${receiptAddr} ${dim('(already deployed)')}`);
+
+    if (!(await wiringComplete(client, vaultAddr, receiptAddr, custodyAdmin, deployerAddress()))) {
+      console.log(`   ${bold('repair')}        : roles incomplete — ${dryRun ? 'WOULD run' : 'running'} finish-donations.ts`);
+      if (!dryRun) {
+        hardhat('finish-donations.ts', name, {
+          DONATION_VAULT: vaultAddr,
+          DONATION_RECEIPT: receiptAddr,
+        });
+      }
+    } else {
+      console.log(`   roles         : ${dim('wired, custody with the Safe ✓')}`);
+    }
   } else if (expected) {
     console.log(`   vault         : ${vaultAddr} ${dim('(predicted)')}`);
     console.log(`   receipt       : ${receiptAddr} ${dim('(predicted)')}`);

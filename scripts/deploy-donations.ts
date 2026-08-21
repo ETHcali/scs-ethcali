@@ -117,6 +117,32 @@ async function main() {
   const plan = Object.fromEntries(donationPlan(deployerAddress));
 
   /**
+   * Poll a boolean read until it turns true.
+   *
+   * A single read is not evidence of absence: public RPCs load-balance and a
+   * read issued right after a write can hit a replica behind the tip. This
+   * matters most just before renouncing DEFAULT_ADMIN — a false negative there
+   * aborts the handoff and leaves two keys holding custody.
+   */
+  const pollTrue = async (read: () => Promise<boolean>, tries = 10, delayMs = 2000) => {
+    for (let i = 0; i < tries; i++) {
+      if (await read()) return true;
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, delayMs));
+    }
+    return false;
+  };
+
+  /** Poll for code at `address`, tolerating replicas that lag the tip. */
+  const waitForCode = async (address: `0x${string}`, tries = 12, delayMs = 2000) => {
+    for (let i = 0; i < tries; i++) {
+      const code = await publicClient.getBytecode({ address });
+      if (code && code !== "0x") return true;
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, delayMs));
+    }
+    return false;
+  };
+
+  /**
    * Deploy through the singleton factory and return a bound contract.
    *
    * Idempotent by construction: if the predicted address already has code, the
@@ -139,12 +165,18 @@ async function main() {
     const rcpt = await publicClient.waitForTransactionReceipt({ hash });
     if (rcpt.status !== "success") throw new Error(`${contract} CREATE2 reverted (${hash})`);
 
-    // Never trust the factory's word for it. A CREATE2 proxy can mine a
-    // successful transaction and still not have deployed anything; attaching
-    // to an empty address would then fail much later, mid-role-setup.
-    const code = await publicClient.getBytecode({ address: predicted });
-    if (!code || code === "0x") {
-      throw new Error(`${contract}: factory mined ${hash} but ${predicted} has no code`);
+    // Never trust the factory's word for it: attaching to an empty address
+    // would fail much later, mid-role-setup.
+    //
+    // But do not trust a SINGLE read either. Public RPCs load-balance, and a
+    // getCode issued immediately after a write can land on a replica still
+    // behind the tip — it reported "no code" for a vault that was in fact
+    // deployed, and killed the launch on a chain that had actually succeeded.
+    // Same race as the campaignCount bug; poll instead of judging on one read.
+    if (!(await waitForCode(predicted))) {
+      throw new Error(
+        `${contract}: factory mined ${hash} but ${predicted} still has no code after retries`
+      );
     }
     console.log(`   ✅ ${predicted}`);
     return viem.getContractAt(contract as never, predicted);
@@ -247,11 +279,12 @@ async function main() {
 
       // Renounce ONLY after confirming the multisig actually holds both roles.
       // Renouncing first would lock custody out permanently.
-      const hasVault = await donationVault.read.isSuperAdmin([custodyAdmin as `0x${string}`]);
-      const hasReceipt = await donationReceipt.read.hasRole([
-        DEFAULT_ADMIN_ROLE,
-        custodyAdmin as `0x${string}`,
-      ]);
+      const hasVault = await pollTrue(() =>
+        donationVault.read.isSuperAdmin([custodyAdmin as `0x${string}`])
+      );
+      const hasReceipt = await pollTrue(() =>
+        donationReceipt.read.hasRole([DEFAULT_ADMIN_ROLE, custodyAdmin as `0x${string}`])
+      );
 
       if (hasVault && hasReceipt) {
         await send("deployer renounce vault DEFAULT_ADMIN", () =>

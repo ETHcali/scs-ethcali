@@ -325,6 +325,25 @@ async function main() {
       }
       campaignId = (created[0] as unknown as { args: { campaignId: bigint } }).args.campaignId;
       console.log(`   campaign id: ${campaignId}`);
+
+      // Wait until the RPC can actually SEE the campaign before configuring it.
+      // The id from the receipt is correct, but the very next write is gas-
+      // estimated against whichever replica answers, and one behind the tip
+      // reverts with CampaignDoesNotExist on a campaign that exists.
+      let visible = false;
+      for (let i = 0; i < 12 && !visible; i++) {
+        try {
+          visible = (await vault.read.campaignCount()) > campaignId;
+        } catch {
+          /* transient RPC error — keep waiting */
+        }
+        if (!visible) await new Promise((r) => setTimeout(r, 2000));
+      }
+      if (!visible) {
+        throw new Error(
+          `campaign ${campaignId} was created but is not visible to this RPC yet — re-run to resume`
+        );
+      }
     }
   }
 
