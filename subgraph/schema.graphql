@@ -1,0 +1,182 @@
+# ETH Cali donations — subgraph schema.
+#
+# One subgraph is deployed per network. The contracts share a single CREATE2
+# address across all four, so `network` is what distinguishes otherwise
+# identical rows once a client merges them.
+#
+# Amounts are BigInt in the token's own base units, never scaled here. USDC is
+# 6 decimals and COPm is 18; dividing in the subgraph would bake one token's
+# decimals into every other. The client formats with `Token.decimals`.
+
+type Campaign @entity(immutable: false) {
+  "The on-chain campaign id, as a decimal string."
+  id: ID!
+  campaignId: BigInt!
+  network: String!
+  vault: Bytes!
+
+  name: String!
+  description: String!
+  beneficiary: Bytes!
+  receiptCollection: Bytes!
+  autoForward: Boolean!
+  active: Boolean!
+
+  createdAt: BigInt!
+  createdAtBlock: BigInt!
+
+  "Number of distinct donor addresses. Incremented only on a donor's first gift."
+  donorCount: Int!
+  donationCount: Int!
+
+  tokens: [CampaignToken!]! @derivedFrom(field: "campaign")
+  donations: [Donation!]! @derivedFrom(field: "campaign")
+}
+
+type Token @entity(immutable: false) {
+  "Lowercase address. The native sentinel 0xEeee…EEeE is used for ETH/CELO."
+  id: ID!
+  address: Bytes!
+  symbol: String!
+  name: String!
+  decimals: Int!
+  isNative: Boolean!
+}
+
+"A currency a campaign accepts, with its running total."
+type CampaignToken @entity(immutable: false) {
+  "campaignId-tokenAddress"
+  id: ID!
+  campaign: Campaign!
+  token: Token!
+  accepted: Boolean!
+
+  "Cumulative raised in base units. Never decreases."
+  totalRaised: BigInt!
+  "Raised minus withdrawn. Stays ~0 in auto-forward mode by design."
+  available: BigInt!
+  donationCount: Int!
+}
+
+type Donor @entity(immutable: false) {
+  "Lowercase donor address."
+  id: ID!
+  address: Bytes!
+  donationCount: Int!
+  firstDonationAt: BigInt!
+  lastDonationAt: BigInt!
+  totals: [DonorTokenTotal!]! @derivedFrom(field: "donor")
+  donations: [Donation!]! @derivedFrom(field: "donor")
+}
+
+"What one donor has given to one campaign in one token — the donor wall row."
+type DonorTokenTotal @entity(immutable: false) {
+  "campaignId-tokenAddress-donorAddress"
+  id: ID!
+  campaign: Campaign!
+  token: Token!
+  donor: Donor!
+  amount: BigInt!
+  donationCount: Int!
+  lastDonationAt: BigInt!
+  "Most recent non-empty message, for display next to the donor."
+  lastMessage: String
+}
+
+"""
+A single donation. Immutable: the chain recorded it and it never changes.
+Whether it forwarded and whether a receipt was issued are resolved within the
+same transaction, so they are set before the entity is ever read.
+"""
+type Donation @entity(immutable: false) {
+  "txHash-logIndex"
+  id: ID!
+  network: String!
+  campaign: Campaign!
+  donor: Donor!
+  token: Token!
+  amount: BigInt!
+  message: String!
+
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  txHash: Bytes!
+  logIndex: BigInt!
+
+  "True once a Forwarded event for this campaign+token lands in the same tx."
+  forwarded: Boolean!
+  "Receipt tier minted for this donation, if any."
+  receiptTokenId: BigInt
+  "Set when the vault tried to mint a receipt and the mint reverted."
+  receiptFailed: Boolean!
+}
+
+"Funds moved to the beneficiary, either automatically or by an admin withdrawal."
+type Payout @entity(immutable: true) {
+  "txHash-logIndex"
+  id: ID!
+  campaign: Campaign!
+  token: Token!
+  beneficiary: Bytes!
+  amount: BigInt!
+  "AUTO_FORWARD or WITHDRAWAL."
+  kind: String!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  txHash: Bytes!
+}
+
+"""
+An auto-forward that reverted. Worth its own entity rather than a flag: the
+donation still succeeded and the vault is now holding funds it did not expect
+to hold, which someone has to act on.
+"""
+type ForwardFailure @entity(immutable: true) {
+  id: ID!
+  campaign: Campaign!
+  token: Token!
+  amount: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  txHash: Bytes!
+}
+
+"""
+Internal: links the follow-up events of a donation back to it.
+
+`Forwarded`, `ReceiptIssued` and `ReceiptFailed` all fire later in the SAME
+transaction as the `Donated` that caused them, but none of them carries the
+donation's log index. Rather than guessing at offsets — which breaks the moment
+a transaction contains two donations — the Donated handler records where it
+wrote, and the others look it up. Keyed by transaction and campaign so a
+multicall donating to two campaigns still resolves correctly.
+"""
+type TxDonation @entity(immutable: false) {
+  "txHash-campaignId"
+  id: ID!
+  donation: Donation!
+}
+
+# ── Receipt collection ─────────────────────────────────────────────────────
+
+type ReceiptTier @entity(immutable: false) {
+  "tokenId as a decimal string."
+  id: ID!
+  tokenId: BigInt!
+  name: String!
+  metadataURI: String!
+  active: Boolean!
+  minted: BigInt!
+}
+
+type Receipt @entity(immutable: true) {
+  "txHash-logIndex"
+  id: ID!
+  network: String!
+  to: Bytes!
+  tier: ReceiptTier!
+  amount: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  txHash: Bytes!
+}
