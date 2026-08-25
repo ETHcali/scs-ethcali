@@ -10,6 +10,7 @@ import {
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { CHAIN_ID_TO_NETWORK, tokensForChain } from "./tokens.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,41 +35,7 @@ const __dirname = path.dirname(__filename);
  * previous one, is preserved.
  */
 
-const CHAIN_ID_TO_NETWORK: Record<number, string> = {
-  1: "ethereum",
-  8453: "base",
-  130: "unichain",
-  10: "optimism",
-  42220: "celo",
-  31337: "hardhat",
-};
-
 const DEFAULT_ADMIN_ROLE = ("0x" + "00".repeat(32)) as `0x${string}`;
-
-/**
- * Reference token addresses recorded alongside a deployment, per chain.
- *
- * Metadata only — the vault learns which tokens it accepts from
- * seed-campaign.ts, never from this record. It was hardcoded to the Celo
- * env vars, which silently stamped Celo's USDC onto every other chain.
- */
-function tokensForChain(chainId: number): Record<string, string> {
-  switch (chainId) {
-    case 42220:
-      return {
-        usdc: process.env.USDC_ADDRESS_CELO || "",
-        copm: process.env.COPM_ADDRESS_CELO || "",
-      };
-    case 8453:
-      return { usdc: process.env.USDC_ADDRESS_BASE || "" };
-    case 10:
-      return { usdc: process.env.USDC_ADDRESS_OP || "" };
-    case 1:
-      return { usdc: process.env.USDC_ADDRESS_ETH || "" };
-    default:
-      return {};
-  }
-}
 
 async function main() {
   console.log("═══════════════════════════════════════════════════════════");

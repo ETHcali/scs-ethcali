@@ -3,6 +3,7 @@ import { formatEther } from "viem";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { CHAIN_ID_TO_NETWORK, tokensForChain } from "./tokens.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,15 +24,6 @@ const __dirname = path.dirname(__filename);
  */
 
 const DEFAULT_ADMIN_ROLE = ("0x" + "00".repeat(32)) as `0x${string}`;
-
-const CHAIN_ID_TO_NETWORK: Record<number, string> = {
-  1: "ethereum",
-  8453: "base",
-  130: "unichain",
-  10: "optimism",
-  42220: "celo",
-  31337: "hardhat",
-};
 
 async function main() {
   const connection = await network.connect();
@@ -203,8 +195,7 @@ async function main() {
       beneficiary,
       opsAdmins,
       custodyTransferred,
-      usdc: process.env.USDC_ADDRESS_CELO || "",
-      copm: process.env.COPM_ADDRESS_CELO || "",
+      ...tokensForChain(chainId),
     },
   };
 
