@@ -3,6 +3,7 @@ import { formatEther } from "viem";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { CHAIN_ID_TO_NETWORK, tokensForChain } from "./tokens.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,15 +24,6 @@ const __dirname = path.dirname(__filename);
  */
 
 const DEFAULT_ADMIN_ROLE = ("0x" + "00".repeat(32)) as `0x${string}`;
-
-const CHAIN_ID_TO_NETWORK: Record<number, string> = {
-  1: "ethereum",
-  8453: "base",
-  130: "unichain",
-  10: "optimism",
-  42220: "celo",
-  31337: "hardhat",
-};
 
 async function main() {
   const connection = await network.connect();
@@ -137,11 +129,19 @@ async function main() {
 
       // Only renounce AFTER confirming the multisig actually holds the role —
       // renouncing first would lock the contracts out of custody permanently.
-      const multisigHasVault = await vault.read.isSuperAdmin([custodyAdmin]);
-      const multisigHasReceipt = await receipt.read.hasRole([
-        DEFAULT_ADMIN_ROLE,
-        custodyAdmin,
-      ]);
+      // Poll: a read right after the grant can hit a replica behind the tip,
+      // and a false negative here aborts the handoff.
+      const pollTrue = async (read: () => Promise<boolean>, tries = 10, delayMs = 2000) => {
+        for (let i = 0; i < tries; i++) {
+          if (await read()) return true;
+          if (i < tries - 1) await new Promise((r) => setTimeout(r, delayMs));
+        }
+        return false;
+      };
+      const multisigHasVault = await pollTrue(() => vault.read.isSuperAdmin([custodyAdmin]));
+      const multisigHasReceipt = await pollTrue(() =>
+        receipt.read.hasRole([DEFAULT_ADMIN_ROLE, custodyAdmin])
+      );
 
       if (multisigHasVault && multisigHasReceipt) {
         if (await vault.read.isSuperAdmin([deployerAddress])) {
@@ -195,8 +195,7 @@ async function main() {
       beneficiary,
       opsAdmins,
       custodyTransferred,
-      usdc: process.env.USDC_ADDRESS_CELO || "",
-      copm: process.env.COPM_ADDRESS_CELO || "",
+      ...tokensForChain(chainId),
     },
   };
 

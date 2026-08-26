@@ -1,0 +1,22 @@
+{
+  "name": "ethcali-donations-subgraph",
+  "version": "1.0.0",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph build",
+    "build:celo": "graph build --network celo",
+    "build:optimism": "graph build --network optimism",
+    "build:base": "graph build --network base",
+    "build:mainnet": "graph build --network mainnet",
+    "deploy:celo": "graph deploy ethcali-donations-celo --network celo",
+    "deploy:optimism": "graph deploy ethcali-donations-optimism --network optimism",
+    "deploy:base": "graph deploy ethcali-donations-base --network base",
+    "deploy:mainnet": "graph deploy ethcali-donations-mainnet --network mainnet"
+  },
+  "devDependencies": {
+    "@graphprotocol/graph-cli": "0.98.1",
+    "@graphprotocol/graph-ts": "0.38.2"
+  }
+}

@@ -4,7 +4,7 @@
   "swag1155": "0xfc87358e017ec814fe94139af82e6f25b293d5b8",
   "swagFactory": "0x89fb2a22bbb309703019b34439ae70b7e6d81e96",
   "network": "base",
-  "timestamp": "2026-08-21T06:19:56.344Z",
+  "timestamp": "2026-08-21T06:16:25.075Z",
   "config": {
     "network": "base",
     "swagAdmin": "0x3C9204B25966591749450FB233D58E850e7C1f9F",
@@ -23,7 +23,7 @@
       "0x3B89Ad8CC39900778aBCdcc22bc83cAC031A415B",
       "0x35b0c64CeDC2fD1a7298984CBa5C7E402970BC6B"
     ],
-    "custodyTransferred": true,
+    "custodyTransferred": false,
     "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
   }
 }

@@ -1,5 +1,5 @@
 import { network } from "hardhat";
-import { formatUnits, parseUnits } from "viem";
+import { formatUnits, parseUnits, parseEventLogs } from "viem";
 
 /** Minimal ERC-20 metadata ABI — inline, because IERC20Metadata has no artifact. */
 const ERC20_METADATA_ABI = [
@@ -121,6 +121,30 @@ const CURRENCIES_BY_CHAIN: Record<number, CurrencyPlan[]> = {
     },
   ],
 
+  // ── Base (8453) ──────────────────────────────────────────────────────────
+  8453: [
+    {
+      // NATIVE Circle USDC. The bridged USDbC at 0xd9aAEc86… also answers
+      // symbol() with a USDC-ish string, so match on the address, not the name.
+      symbol: "USDC",
+      address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      decimals: 6,
+      tiers: [
+        { min: "10", receiptTokenId: 1 },
+        { min: "100", receiptTokenId: 2 },
+      ],
+    },
+    {
+      symbol: "ETH",
+      address: ETH_TOKEN,
+      decimals: 18,
+      tiers: [
+        { min: "0.0025", receiptTokenId: 1 }, // ~USD 10
+        { min: "0.025", receiptTokenId: 2 },  // ~USD 100
+      ],
+    },
+  ],
+
   // ── Ethereum (1) ─────────────────────────────────────────────────────────
   1: [
     {
@@ -220,10 +244,11 @@ async function main() {
   }
 
   let sent = 0;
+  /** Returns the mined receipt, or undefined on a dry run. */
   const send = async (label: string, fn: () => Promise<`0x${string}`>) => {
     if (dryRun) {
       console.log(`   WOULD ${label}`);
-      return;
+      return undefined;
     }
     process.stdout.write(`   ${label} … `);
     const hash = await fn();
@@ -231,6 +256,7 @@ async function main() {
     console.log(rcpt.status === "success" ? "ok" : "FAILED");
     if (rcpt.status !== "success") throw new Error(`${label} reverted (${hash})`);
     sent++;
+    return rcpt;
   };
 
   // ── 1. Receipt tiers ─────────────────────────────────────────────────────
@@ -272,7 +298,7 @@ async function main() {
       console.log(`   WOULD create campaign "${name}" -> #${count}`);
       campaignId = count; // assume the next id for the rest of the dry run
     } else {
-      await send(`create campaign "${name}"`, () =>
+      const rcpt = await send(`create campaign "${name}"`, () =>
         vault.write.createCampaign([
           name,
           description,
@@ -281,8 +307,43 @@ async function main() {
           autoForward,
         ])
       );
-      campaignId = await vault.read.campaignCount() - 1n;
+
+      // Read the id out of the receipt's own event, not from campaignCount().
+      // Forno load-balances, so a read issued immediately after a write can
+      // land on a node still behind the tip: it returned the pre-write count,
+      // `count - 1` underflowed to -1, and every later call failed to encode.
+      // The receipt is self-contained and cannot race.
+      const created = parseEventLogs({
+        abi: vault.abi,
+        logs: rcpt!.logs,
+        eventName: "CampaignCreated",
+      });
+      if (created.length === 0) {
+        throw new Error(
+          "createCampaign mined but emitted no CampaignCreated event — refusing to guess the id"
+        );
+      }
+      campaignId = (created[0] as unknown as { args: { campaignId: bigint } }).args.campaignId;
       console.log(`   campaign id: ${campaignId}`);
+
+      // Wait until the RPC can actually SEE the campaign before configuring it.
+      // The id from the receipt is correct, but the very next write is gas-
+      // estimated against whichever replica answers, and one behind the tip
+      // reverts with CampaignDoesNotExist on a campaign that exists.
+      let visible = false;
+      for (let i = 0; i < 12 && !visible; i++) {
+        try {
+          visible = (await vault.read.campaignCount()) > campaignId;
+        } catch {
+          /* transient RPC error — keep waiting */
+        }
+        if (!visible) await new Promise((r) => setTimeout(r, 2000));
+      }
+      if (!visible) {
+        throw new Error(
+          `campaign ${campaignId} was created but is not visible to this RPC yet — re-run to resume`
+        );
+      }
     }
   }
 

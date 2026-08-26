@@ -9,6 +9,24 @@ contracts. Solidity 0.8.28, OpenZeppelin 5.4, optimizer runs 1, viaIR, cancun.
 
 See `../CLAUDE.md` for workspace-wide rules (architecture, verified addresses, skills to load).
 
+## Load These Skills First
+
+Installed in-repo and pinned in `skills-lock.json` (`npx skills update` to refresh):
+
+| Doing this | Load |
+|-----------|------|
+| Anything touching `hardhat.config.ts`, the `hardhat` import, `network.connect()`, or a test | `hardhat` |
+| viem clients, `deployContract`, `read`/`write`, `viem.assertions` | `hardhat-toolbox-viem` |
+
+**Where they disagree with this file, this file wins.** The upstream `hardhat` skill
+recommends Solidity `.t.sol` tests as the default unit-test layer. This repo deliberately
+splits differently — TypeScript for flows and integration, Foundry for fuzz and invariants
+on contracts that hold funds — because the Foundry side predates Hardhat 3's Solidity test
+runner and the invariant handlers depend on it. Do not restructure the suite to match the
+skill.
+
+See `../CLAUDE.md` for the workspace-wide `ethskills` table (security, indexing, frontend).
+
 ## Verification (MANDATORY)
 
 ```bash

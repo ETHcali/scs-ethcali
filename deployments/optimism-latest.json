@@ -4,7 +4,7 @@
   "swag1155": "0xd9663db045850171850fd1298a2176b329a67928",
   "swagFactory": "0x94b9f649f8825d5d797e37d04dfc66d612750b10",
   "network": "optimism",
-  "timestamp": "2026-03-06T06:21:09.736Z",
+  "timestamp": "2026-08-21T06:15:57.787Z",
   "config": {
     "network": "optimism",
     "swagAdmin": "0x3C9204B25966591749450FB233D58E850e7C1f9F",
@@ -12,5 +12,18 @@
     "zkPassportAdmin": "0x3C9204B25966591749450FB233D58E850e7C1f9F",
     "swagTreasury": "0x3C9204B25966591749450FB233D58E850e7C1f9F",
     "usdcAddress": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"
+  },
+  "donationVault": "0x223f70933a14E847D83ff1e906C8CCf6962d36d3",
+  "donationReceipt": "0xA4E67a7bc9e17D6eBBCaa369727b9e8949D278e0",
+  "donationConfig": {
+    "deployer": "0x3b89ad8cc39900778abcdcc22bc83cac031a415b",
+    "custodyAdmin": "0xB6BDe4fB6dFBad5488Fa31Edf0F3730D9D86da64",
+    "beneficiary": "0xB6BDe4fB6dFBad5488Fa31Edf0F3730D9D86da64",
+    "opsAdmins": [
+      "0x3B89Ad8CC39900778aBCdcc22bc83cAC031A415B",
+      "0x35b0c64CeDC2fD1a7298984CBa5C7E402970BC6B"
+    ],
+    "custodyTransferred": true,
+    "usdc": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"
   }
 }

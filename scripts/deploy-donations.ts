@@ -1,8 +1,16 @@
 import { network } from "hardhat";
 import { formatEther } from "viem";
+import {
+  SINGLETON_FACTORY,
+  donationPlan,
+  donationSalt,
+  factoryCalldata,
+  predictAddress,
+} from "./deterministic.mjs";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { CHAIN_ID_TO_NETWORK, tokensForChain } from "./tokens.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,15 +34,6 @@ const __dirname = path.dirname(__filename);
  * Results are MERGED into <network>-latest.json so a later full deploy, or a
  * previous one, is preserved.
  */
-
-const CHAIN_ID_TO_NETWORK: Record<number, string> = {
-  1: "ethereum",
-  8453: "base",
-  130: "unichain",
-  10: "optimism",
-  42220: "celo",
-  31337: "hardhat",
-};
 
 const DEFAULT_ADMIN_ROLE = ("0x" + "00".repeat(32)) as `0x${string}`;
 
@@ -76,18 +75,107 @@ async function main() {
   }
 
   // ── Deploy ────────────────────────────────────────────────────────────────
+  // CREATE2 by default, so the vault and receipt carry the SAME address on
+  // every chain. DETERMINISTIC=0 falls back to plain CREATE (nonce-derived,
+  // therefore different everywhere).
+  const deterministic = process.env.DETERMINISTIC !== "0";
+
+  const salt = donationSalt();
+  const plan = Object.fromEntries(donationPlan(deployerAddress));
+
+  /**
+   * Poll a boolean read until it turns true.
+   *
+   * A single read is not evidence of absence: public RPCs load-balance and a
+   * read issued right after a write can hit a replica behind the tip. This
+   * matters most just before renouncing DEFAULT_ADMIN — a false negative there
+   * aborts the handoff and leaves two keys holding custody.
+   */
+  const pollTrue = async (read: () => Promise<boolean>, tries = 10, delayMs = 2000) => {
+    for (let i = 0; i < tries; i++) {
+      if (await read()) return true;
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, delayMs));
+    }
+    return false;
+  };
+
+  /** Poll for code at `address`, tolerating replicas that lag the tip. */
+  const waitForCode = async (address: `0x${string}`, tries = 12, delayMs = 2000) => {
+    for (let i = 0; i < tries; i++) {
+      const code = await publicClient.getBytecode({ address });
+      if (code && code !== "0x") return true;
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, delayMs));
+    }
+    return false;
+  };
+
+  /**
+   * Deploy through the singleton factory and return a bound contract.
+   *
+   * Idempotent by construction: if the predicted address already has code, the
+   * contract is already there and we attach to it. Re-running after a partial
+   * deploy costs nothing.
+   */
+  const deployVia2 = async (contract: string, args: readonly unknown[]) => {
+    const predicted = predictAddress(contract, args, salt) as `0x${string}`;
+    const already = await publicClient.getBytecode({ address: predicted });
+
+    if (already && already !== "0x") {
+      console.log(`   ↩︎  ${contract} already at ${predicted} — reusing`);
+      return viem.getContractAt(contract as never, predicted);
+    }
+
+    const hash = await deployer.sendTransaction({
+      to: SINGLETON_FACTORY as `0x${string}`,
+      data: factoryCalldata(contract, args, salt) as `0x${string}`,
+    });
+    const rcpt = await publicClient.waitForTransactionReceipt({ hash });
+    if (rcpt.status !== "success") throw new Error(`${contract} CREATE2 reverted (${hash})`);
+
+    // Never trust the factory's word for it: attaching to an empty address
+    // would fail much later, mid-role-setup.
+    //
+    // But do not trust a SINGLE read either. Public RPCs load-balance, and a
+    // getCode issued immediately after a write can land on a replica still
+    // behind the tip — it reported "no code" for a vault that was in fact
+    // deployed, and killed the launch on a chain that had actually succeeded.
+    // Same race as the campaignCount bug; poll instead of judging on one read.
+    if (!(await waitForCode(predicted))) {
+      throw new Error(
+        `${contract}: factory mined ${hash} but ${predicted} still has no code after retries`
+      );
+    }
+    console.log(`   ✅ ${predicted}`);
+    return viem.getContractAt(contract as never, predicted);
+  };
+
+  if (deterministic) {
+    const factoryCode = await publicClient.getBytecode({ address: SINGLETON_FACTORY as `0x${string}` });
+    if (!factoryCode || factoryCode === "0x") {
+      throw new Error(
+        `Safe Singleton Factory is not deployed on ${networkName}. ` +
+          `Re-run with DETERMINISTIC=0 to accept a chain-specific address.`
+      );
+    }
+    console.log(`\n🧬 Deterministic deploy — salt ${salt}`);
+  }
+
   console.log("\n📦 Deploying DonationReceipt1155...");
-  const donationReceipt = await viem.deployContract("DonationReceipt1155", [
-    process.env.DONATION_RECEIPT_NAME || "ETH Cali Relief Receipts",
-    process.env.DONATION_RECEIPT_SYMBOL || "ETHCALI-RELIEF",
-    process.env.DONATION_RECEIPT_BASE_URI || "",
-    deployerAddress,
-  ]);
-  console.log(`   ✅ ${donationReceipt.address}`);
+  const donationReceipt = deterministic
+    ? await deployVia2("DonationReceipt1155", plan.DonationReceipt1155)
+    : await viem.deployContract("DonationReceipt1155", [
+        process.env.DONATION_RECEIPT_NAME || "ETH Cali Relief Receipts",
+        process.env.DONATION_RECEIPT_SYMBOL || "ETHCALI-RELIEF",
+        process.env.DONATION_RECEIPT_BASE_URI || "",
+        deployerAddress,
+      ]);
+  if (!deterministic) console.log(`   ✅ ${donationReceipt.address}`);
 
   console.log("\n📦 Deploying DonationVault...");
-  const donationVault = await viem.deployContract("DonationVault", [deployerAddress]);
-  console.log(`   ✅ ${donationVault.address}`);
+  const donationVault = deterministic
+    ? await deployVia2("DonationVault", plan.DonationVault)
+    : await viem.deployContract("DonationVault", [deployerAddress]);
+  if (!deterministic) console.log(`   ✅ ${donationVault.address}`);
 
   /**
    * Send a write and WAIT for the receipt before returning.
@@ -109,6 +197,21 @@ async function main() {
   // emits ReceiptFailed and the donor receives no NFT.
   console.log("\n🔗 Wiring roles...");
   await send("grant vault MINTER_ROLE", () => donationReceipt.write.addMinter([donationVault.address]));
+
+  // A deterministic deploy always constructs the receipt with an EMPTY baseURI
+  // so the address never depends on metadata that is not pinned yet — set it
+  // here instead. Storage, not address: safe to change later, and safe to
+  // differ between chains while the pinning catches up.
+  const configuredBaseURI = process.env.DONATION_RECEIPT_BASE_URI || "";
+  const baseURIIsReal = configuredBaseURI && !configuredBaseURI.includes("YourBaseCid");
+  if (deterministic && baseURIIsReal) {
+    await send(`set receipt baseURI`, () => donationReceipt.write.setBaseURI([configuredBaseURI]));
+  } else if (deterministic && configuredBaseURI) {
+    console.log(
+      `   ⚠️  DONATION_RECEIPT_BASE_URI is still the placeholder — receipt metadata\n` +
+        `       is unset. Pin the JSON, then call setBaseURI(). No redeploy needed.`
+    );
+  }
 
   for (const admin of opsAdmins) {
     if (admin.toLowerCase() === deployerAddress.toLowerCase()) continue;
@@ -143,11 +246,12 @@ async function main() {
 
       // Renounce ONLY after confirming the multisig actually holds both roles.
       // Renouncing first would lock custody out permanently.
-      const hasVault = await donationVault.read.isSuperAdmin([custodyAdmin as `0x${string}`]);
-      const hasReceipt = await donationReceipt.read.hasRole([
-        DEFAULT_ADMIN_ROLE,
-        custodyAdmin as `0x${string}`,
-      ]);
+      const hasVault = await pollTrue(() =>
+        donationVault.read.isSuperAdmin([custodyAdmin as `0x${string}`])
+      );
+      const hasReceipt = await pollTrue(() =>
+        donationReceipt.read.hasRole([DEFAULT_ADMIN_ROLE, custodyAdmin as `0x${string}`])
+      );
 
       if (hasVault && hasReceipt) {
         await send("deployer renounce vault DEFAULT_ADMIN", () =>
@@ -202,8 +306,7 @@ async function main() {
       beneficiary,
       opsAdmins,
       custodyTransferred,
-      usdc: process.env.USDC_ADDRESS_CELO || "",
-      copm: process.env.COPM_ADDRESS_CELO || "",
+      ...tokensForChain(chainId),
     },
   };
 

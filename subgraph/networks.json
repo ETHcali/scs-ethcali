@@ -1,0 +1,42 @@
+{
+  "celo": {
+    "DonationVault": {
+      "address": "0x223f70933a14E847D83ff1e906C8CCf6962d36d3",
+      "startBlock": 75391791
+    },
+    "DonationReceipt1155": {
+      "address": "0xA4E67a7bc9e17D6eBBCaa369727b9e8949D278e0",
+      "startBlock": 75391771
+    }
+  },
+  "optimism": {
+    "DonationVault": {
+      "address": "0x223f70933a14E847D83ff1e906C8CCf6962d36d3",
+      "startBlock": 155847027
+    },
+    "DonationReceipt1155": {
+      "address": "0xA4E67a7bc9e17D6eBBCaa369727b9e8949D278e0",
+      "startBlock": 155847025
+    }
+  },
+  "base": {
+    "DonationVault": {
+      "address": "0x223f70933a14E847D83ff1e906C8CCf6962d36d3",
+      "startBlock": 50251816
+    },
+    "DonationReceipt1155": {
+      "address": "0xA4E67a7bc9e17D6eBBCaa369727b9e8949D278e0",
+      "startBlock": 50251815
+    }
+  },
+  "mainnet": {
+    "DonationVault": {
+      "address": "0x223f70933a14E847D83ff1e906C8CCf6962d36d3",
+      "startBlock": 25801675
+    },
+    "DonationReceipt1155": {
+      "address": "0xA4E67a7bc9e17D6eBBCaa369727b9e8949D278e0",
+      "startBlock": 25801674
+    }
+  }
+}

@@ -1,0 +1,83 @@
+specVersion: 1.0.0
+description: ETH Cali donation vault and soulbound donation receipts.
+repository: https://github.com/ETHcali/scs-ethcali
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum/contract
+    name: DonationVault
+    network: celo
+    source:
+      abi: DonationVault
+      address: "0x223f70933a14E847D83ff1e906C8CCf6962d36d3"
+      startBlock: 75391791
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      file: ./src/donation-vault.ts
+      entities:
+        - Campaign
+        - CampaignToken
+        - Donation
+        - Donor
+        - DonorTokenTotal
+        - Payout
+        - ForwardFailure
+        - Token
+      abis:
+        - name: DonationVault
+          file: ./abis/DonationVault.json
+        - name: ERC20
+          file: ./abis/ERC20.json
+      eventHandlers:
+        - event: CampaignCreated(indexed uint256,string,indexed address,indexed
+            address,bool)
+          handler: handleCampaignCreated
+        - event: CampaignUpdated(indexed uint256,string,string,bool)
+          handler: handleCampaignUpdated
+        - event: BeneficiaryUpdated(indexed uint256,indexed address,indexed address)
+          handler: handleBeneficiaryUpdated
+        - event: AutoForwardUpdated(indexed uint256,bool)
+          handler: handleAutoForwardUpdated
+        - event: ReceiptCollectionUpdated(indexed uint256,indexed address,indexed address)
+          handler: handleReceiptCollectionUpdated
+        - event: TokenAccepted(indexed uint256,indexed address,bool)
+          handler: handleTokenAccepted
+        - event: Donated(indexed uint256,indexed address,indexed address,uint256,string)
+          handler: handleDonated
+        - event: Forwarded(indexed uint256,indexed address,indexed address,uint256)
+          handler: handleForwarded
+        - event: ForwardFailed(indexed uint256,indexed address,uint256)
+          handler: handleForwardFailed
+        - event: Withdrawn(indexed uint256,indexed address,indexed address,uint256)
+          handler: handleWithdrawn
+        - event: ReceiptIssued(indexed uint256,indexed address,uint256)
+          handler: handleReceiptIssued
+        - event: ReceiptFailed(indexed uint256,indexed address,uint256)
+          handler: handleReceiptFailed
+  - kind: ethereum/contract
+    name: DonationReceipt1155
+    network: celo
+    source:
+      abi: DonationReceipt1155
+      address: "0xA4E67a7bc9e17D6eBBCaa369727b9e8949D278e0"
+      startBlock: 75391771
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      file: ./src/donation-receipt.ts
+      entities:
+        - ReceiptTier
+        - Receipt
+      abis:
+        - name: DonationReceipt1155
+          file: ./abis/DonationReceipt1155.json
+      eventHandlers:
+        - event: TierSet(indexed uint256,string,string,bool)
+          handler: handleTierSet
+        - event: TierRemoved(indexed uint256)
+          handler: handleTierRemoved
+        - event: ReceiptMinted(indexed address,indexed uint256,uint256)
+          handler: handleReceiptMinted
