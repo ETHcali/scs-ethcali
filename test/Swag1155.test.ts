@@ -25,7 +25,7 @@ describe("Swag1155", async function () {
   let factory: any;
   let chainId: number;
 
-  const BASE_URI = "https://wallet.ethcali.org/metadata/{id}.json";
+  const BASE_URI = "https://app.ethcali.org/metadata/{id}.json";
 
   /** Deploy a fresh collection so tests never depend on each other's supply. */
   async function freshCollection(onchainCap: bigint, voucherCap: bigint) {

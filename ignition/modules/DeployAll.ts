@@ -61,7 +61,11 @@ export default buildModule("CompleteSystem", (m) => {
 
   const baseURI = m.getParameter(
     "baseURI",
-    process.env.SWAG1155_BASE_URI || "https://wallet.ethcali.org/metadata/{id}.json"
+    // NOTE: no /metadata route is served at this host yet — the URI is a
+    // placeholder for a collection that does not exist. Set SWAG1155_BASE_URI
+    // explicitly before deploying a real collection, and confirm the route
+    // resolves; a baseURI is immutable on a clone once initialised.
+    process.env.SWAG1155_BASE_URI || "https://app.ethcali.org/metadata/{id}.json"
   );
   const usdc = m.getParameter("usdc", usdcEnv);
   const treasury = m.getParameter("treasury", treasuryEnv);
