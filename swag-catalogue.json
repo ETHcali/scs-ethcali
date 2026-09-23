@@ -10,7 +10,7 @@
     "",
     "Prices are human-readable USD, parsed with USDC's 6 decimals by the seeder. COP follows the",
     "live TRM rate (app) or a daily push (Shopify). USDC is the only on-chain token at launch.",
-    "Stock decided 2026-09-23: 5 per design, 1 sold on chain via buy(), 4 via Shopify vouchers.",
+    "Stock decided 2026-09-23: 5 per design; prices revised 2026-09-23 to cap 15 / mug 10 / tee 30 / hoodie 50 USD, 1 sold on chain via buy(), 4 via Shopify vouchers.",
     "Caps can be raised later, never lowered below what has been minted.",
     "",
     "imageCid / metadataCid are filled by wallet_ethcali/scripts/swag-pin.mjs. The seeder refuses",
@@ -32,20 +32,20 @@
             "en": "Privacy is Freedom cap — Octahedron"
           },
           "description": {
-            "es": "La colección Valle del Cauca. La gorra con el octaedro al frente. Edición limitada.",
-            "en": "The Valle del Cauca collection. The cap with the octahedron on the front. Limited edition."
+            "es": "La colección Valle del Cauca. El octaedro al frente, la frase atrás. Edición limitada.",
+            "en": "The Valle del Cauca collection. The octahedron on the front, the line on the back. Limited edition."
           },
-          "image": "cap-privacy-is-freedom.png",
-          "imageCid": "bafybeiavmd2t74eakndqiymiqtdac3rutldmwp2skkjwn3iqapxkiwurza",
-          "metadataCid": "bafkreidxqwtxnzbirhscjtchdehpud27wjc5cq6azhf2n6qxd3bq4447e4",
-          "metadataURI": "ipfs://bafkreidxqwtxnzbirhscjtchdehpud27wjc5cq6azhf2n6qxd3bq4447e4",
+          "image": "cap-privacy-is-freedom-text-back.png",
+          "imageCid": "bafybeiepcn3kltefo7oue6ouxpw4cdq7tggoxo7vwehpt6lyipe74vzu5y",
+          "metadataCid": "bafkreignyvuglaosufojts7yergf66vpsn32wgqot4ks6ec7l67hxpaj4y",
+          "metadataURI": "ipfs://bafkreignyvuglaosufojts7yergf66vpsn32wgqot4ks6ec7l67hxpaj4y",
           "sized": false,
           "sizes": [],
           "onchainCap": 1,
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "25"
+            "USDC": "15"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657022138",
@@ -56,10 +56,10 @@
                 "size": null,
                 "variantId": "gid://shopify/ProductVariant/46749005971642",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909378912442",
-                "priceCop": 80000
+                "priceCop": 48000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:03.528Z"
+            "syncedAt": "2026-09-23T05:36:47.028Z"
           }
         },
         {
@@ -71,10 +71,10 @@
             "en": "Privacy is Freedom cap — Phrase"
           },
           "description": {
-            "es": "La colección Valle del Cauca. La gorra con la frase al frente. Edición limitada.",
-            "en": "The Valle del Cauca collection. The cap with the line on the front. Limited edition."
+            "es": "La colección Valle del Cauca. La frase al frente, el octaedro atrás. Edición limitada.",
+            "en": "The Valle del Cauca collection. The line on the front, the octahedron on the back. Limited edition."
           },
-          "image": "cap-privacy-is-freedom.png",
+          "image": "cap-privacy-is-freedom-text-front.png",
           "imageCid": "bafybeiavmd2t74eakndqiymiqtdac3rutldmwp2skkjwn3iqapxkiwurza",
           "metadataCid": "bafkreicz7cy2rh67pvax6vrdvuqvwl6iiepc62tg7r3zaoq2fmfolqo7fi",
           "metadataURI": "ipfs://bafkreicz7cy2rh67pvax6vrdvuqvwl6iiepc62tg7r3zaoq2fmfolqo7fi",
@@ -84,7 +84,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "25"
+            "USDC": "15"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657120442",
@@ -95,10 +95,10 @@
                 "size": null,
                 "variantId": "gid://shopify/ProductVariant/46749006037178",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909378977978",
-                "priceCop": 80000
+                "priceCop": 48000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:04.342Z"
+            "syncedAt": "2026-09-23T05:36:47.528Z"
           }
         },
         {
@@ -123,7 +123,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "25"
+            "USDC": "15"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657185978",
@@ -134,10 +134,10 @@
                 "size": null,
                 "variantId": "gid://shopify/ProductVariant/46749006135482",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379076282",
-                "priceCop": 80000
+                "priceCop": 48000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:05.088Z"
+            "syncedAt": "2026-09-23T05:36:48.051Z"
           }
         },
         {
@@ -162,7 +162,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "25"
+            "USDC": "15"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657251514",
@@ -173,10 +173,10 @@
                 "size": null,
                 "variantId": "gid://shopify/ProductVariant/46749006201018",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379141818",
-                "priceCop": 80000
+                "priceCop": 48000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:05.868Z"
+            "syncedAt": "2026-09-23T05:36:48.663Z"
           }
         },
         {
@@ -201,7 +201,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "25"
+            "USDC": "15"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657317050",
@@ -212,10 +212,10 @@
                 "size": null,
                 "variantId": "gid://shopify/ProductVariant/46749006266554",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379207354",
-                "priceCop": 80000
+                "priceCop": 48000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:06.628Z"
+            "syncedAt": "2026-09-23T05:36:49.158Z"
           }
         },
         {
@@ -240,7 +240,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "25"
+            "USDC": "15"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657415354",
@@ -251,10 +251,10 @@
                 "size": null,
                 "variantId": "gid://shopify/ProductVariant/46749006364858",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379305658",
-                "priceCop": 80000
+                "priceCop": 48000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:07.477Z"
+            "syncedAt": "2026-09-23T05:36:49.699Z"
           }
         },
         {
@@ -279,7 +279,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "15"
+            "USDC": "10"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657480890",
@@ -290,10 +290,10 @@
                 "size": null,
                 "variantId": "gid://shopify/ProductVariant/46749006430394",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379371194",
-                "priceCop": 48000
+                "priceCop": 32000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:08.232Z"
+            "syncedAt": "2026-09-23T05:36:50.197Z"
           }
         },
         {
@@ -318,7 +318,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "15"
+            "USDC": "10"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657546426",
@@ -329,10 +329,10 @@
                 "size": null,
                 "variantId": "gid://shopify/ProductVariant/46749006495930",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379436730",
-                "priceCop": 48000
+                "priceCop": 32000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:09.041Z"
+            "syncedAt": "2026-09-23T05:36:50.671Z"
           }
         },
         {
@@ -357,7 +357,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "15"
+            "USDC": "10"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657611962",
@@ -368,10 +368,10 @@
                 "size": null,
                 "variantId": "gid://shopify/ProductVariant/46749006561466",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379502266",
-                "priceCop": 48000
+                "priceCop": 32000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:09.845Z"
+            "syncedAt": "2026-09-23T05:36:51.212Z"
           }
         },
         {
@@ -396,7 +396,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "15"
+            "USDC": "10"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657677498",
@@ -407,10 +407,10 @@
                 "size": null,
                 "variantId": "gid://shopify/ProductVariant/46749006627002",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379567802",
-                "priceCop": 48000
+                "priceCop": 32000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:10.610Z"
+            "syncedAt": "2026-09-23T05:36:51.722Z"
           }
         },
         {
@@ -440,7 +440,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "45"
+            "USDC": "50"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657775802",
@@ -451,31 +451,31 @@
                 "size": "S",
                 "variantId": "gid://shopify/ProductVariant/46749006725306",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379666106",
-                "priceCop": 144000
+                "priceCop": 160000
               },
               {
                 "sku": "ETHCALI-HOODIE-CREAM-2026-M",
                 "size": "M",
                 "variantId": "gid://shopify/ProductVariant/46749006758074",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379698874",
-                "priceCop": 144000
+                "priceCop": 160000
               },
               {
                 "sku": "ETHCALI-HOODIE-CREAM-2026-L",
                 "size": "L",
                 "variantId": "gid://shopify/ProductVariant/46749006790842",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379731642",
-                "priceCop": 144000
+                "priceCop": 160000
               },
               {
                 "sku": "ETHCALI-HOODIE-CREAM-2026-XL",
                 "size": "XL",
                 "variantId": "gid://shopify/ProductVariant/46749006823610",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379764410",
-                "priceCop": 144000
+                "priceCop": 160000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:11.423Z"
+            "syncedAt": "2026-09-23T05:36:52.245Z"
           }
         },
         {
@@ -505,7 +505,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "45"
+            "USDC": "50"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657841338",
@@ -516,31 +516,31 @@
                 "size": "S",
                 "variantId": "gid://shopify/ProductVariant/46749006889146",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379829946",
-                "priceCop": 144000
+                "priceCop": 160000
               },
               {
                 "sku": "ETHCALI-HOODIE-BLACK-2026-M",
                 "size": "M",
                 "variantId": "gid://shopify/ProductVariant/46749006921914",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379862714",
-                "priceCop": 144000
+                "priceCop": 160000
               },
               {
                 "sku": "ETHCALI-HOODIE-BLACK-2026-L",
                 "size": "L",
                 "variantId": "gid://shopify/ProductVariant/46749006954682",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379895482",
-                "priceCop": 144000
+                "priceCop": 160000
               },
               {
                 "sku": "ETHCALI-HOODIE-BLACK-2026-XL",
                 "size": "XL",
                 "variantId": "gid://shopify/ProductVariant/46749006987450",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379928250",
-                "priceCop": 144000
+                "priceCop": 160000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:12.355Z"
+            "syncedAt": "2026-09-23T05:36:52.650Z"
           }
         },
         {
@@ -570,7 +570,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "45"
+            "USDC": "50"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657906874",
@@ -581,31 +581,31 @@
                 "size": "S",
                 "variantId": "gid://shopify/ProductVariant/46749007052986",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909379993786",
-                "priceCop": 144000
+                "priceCop": 160000
               },
               {
                 "sku": "ETHCALI-HOODIE-COMMUNITY-2026-M",
                 "size": "M",
                 "variantId": "gid://shopify/ProductVariant/46749007085754",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909380026554",
-                "priceCop": 144000
+                "priceCop": 160000
               },
               {
                 "sku": "ETHCALI-HOODIE-COMMUNITY-2026-L",
                 "size": "L",
                 "variantId": "gid://shopify/ProductVariant/46749007118522",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909380059322",
-                "priceCop": 144000
+                "priceCop": 160000
               },
               {
                 "sku": "ETHCALI-HOODIE-COMMUNITY-2026-XL",
                 "size": "XL",
                 "variantId": "gid://shopify/ProductVariant/46749007151290",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909380092090",
-                "priceCop": 144000
+                "priceCop": 160000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:13.193Z"
+            "syncedAt": "2026-09-23T05:36:53.119Z"
           }
         },
         {
@@ -635,7 +635,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "25"
+            "USDC": "30"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554658005178",
@@ -646,31 +646,31 @@
                 "size": "S",
                 "variantId": "gid://shopify/ProductVariant/46749007216826",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909380157626",
-                "priceCop": 80000
+                "priceCop": 96000
               },
               {
                 "sku": "ETHCALI-TEE-UNISWAP-CALI-2026-M",
                 "size": "M",
                 "variantId": "gid://shopify/ProductVariant/46749007249594",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909380190394",
-                "priceCop": 80000
+                "priceCop": 96000
               },
               {
                 "sku": "ETHCALI-TEE-UNISWAP-CALI-2026-L",
                 "size": "L",
                 "variantId": "gid://shopify/ProductVariant/46749007282362",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909380223162",
-                "priceCop": 80000
+                "priceCop": 96000
               },
               {
                 "sku": "ETHCALI-TEE-UNISWAP-CALI-2026-XL",
                 "size": "XL",
                 "variantId": "gid://shopify/ProductVariant/46749007315130",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909380255930",
-                "priceCop": 80000
+                "priceCop": 96000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:14.033Z"
+            "syncedAt": "2026-09-23T05:36:53.682Z"
           }
         },
         {
@@ -700,7 +700,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "25"
+            "USDC": "30"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554658070714",
@@ -711,31 +711,31 @@
                 "size": "S",
                 "variantId": "gid://shopify/ProductVariant/46749007413434",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909380354234",
-                "priceCop": 80000
+                "priceCop": 96000
               },
               {
                 "sku": "ETHCALI-TEE-IMPACT-2026-M",
                 "size": "M",
                 "variantId": "gid://shopify/ProductVariant/46749007446202",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909380387002",
-                "priceCop": 80000
+                "priceCop": 96000
               },
               {
                 "sku": "ETHCALI-TEE-IMPACT-2026-L",
                 "size": "L",
                 "variantId": "gid://shopify/ProductVariant/46749007478970",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909380419770",
-                "priceCop": 80000
+                "priceCop": 96000
               },
               {
                 "sku": "ETHCALI-TEE-IMPACT-2026-XL",
                 "size": "XL",
                 "variantId": "gid://shopify/ProductVariant/46749007511738",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909380452538",
-                "priceCop": 80000
+                "priceCop": 96000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:14.827Z"
+            "syncedAt": "2026-09-23T05:36:54.225Z"
           }
         },
         {
@@ -765,7 +765,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "25"
+            "USDC": "30"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554658169018",
@@ -776,31 +776,31 @@
                 "size": "S",
                 "variantId": "gid://shopify/ProductVariant/46749009707194",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909382647994",
-                "priceCop": 80000
+                "priceCop": 96000
               },
               {
                 "sku": "ETHCALI-TEE-ROBOT-2026-M",
                 "size": "M",
                 "variantId": "gid://shopify/ProductVariant/46749009739962",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909382680762",
-                "priceCop": 80000
+                "priceCop": 96000
               },
               {
                 "sku": "ETHCALI-TEE-ROBOT-2026-L",
                 "size": "L",
                 "variantId": "gid://shopify/ProductVariant/46749009772730",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909382713530",
-                "priceCop": 80000
+                "priceCop": 96000
               },
               {
                 "sku": "ETHCALI-TEE-ROBOT-2026-XL",
                 "size": "XL",
                 "variantId": "gid://shopify/ProductVariant/46749009805498",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909382746298",
-                "priceCop": 80000
+                "priceCop": 96000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:15.649Z"
+            "syncedAt": "2026-09-23T05:36:54.694Z"
           }
         },
         {
@@ -830,7 +830,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "25"
+            "USDC": "30"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554658234554",
@@ -841,31 +841,31 @@
                 "size": "S",
                 "variantId": "gid://shopify/ProductVariant/46749009871034",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909382811834",
-                "priceCop": 80000
+                "priceCop": 96000
               },
               {
                 "sku": "ETHCALI-TEE-DOGE-MERKLE-2026-M",
                 "size": "M",
                 "variantId": "gid://shopify/ProductVariant/46749009903802",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909382844602",
-                "priceCop": 80000
+                "priceCop": 96000
               },
               {
                 "sku": "ETHCALI-TEE-DOGE-MERKLE-2026-L",
                 "size": "L",
                 "variantId": "gid://shopify/ProductVariant/46749009936570",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909382877370",
-                "priceCop": 80000
+                "priceCop": 96000
               },
               {
                 "sku": "ETHCALI-TEE-DOGE-MERKLE-2026-XL",
                 "size": "XL",
                 "variantId": "gid://shopify/ProductVariant/46749009969338",
                 "inventoryItemId": "gid://shopify/InventoryItem/48909382910138",
-                "priceCop": 80000
+                "priceCop": 96000
               }
             ],
-            "syncedAt": "2026-09-23T03:59:16.398Z"
+            "syncedAt": "2026-09-23T05:36:55.213Z"
           }
         }
       ]
