@@ -30,5 +30,8 @@
     "deployer": "0x3b89ad8cc39900778abcdcc22bc83cac031a415b",
     "swagAdmin": "0x3B89Ad8CC39900778aBCdcc22bc83cAC031A415B",
     "previousSwagFactory": null
+  },
+  "swagCollections": {
+    "ETHCALI-SWAG-2026": "0x5a1012486764c217a20B5D1b97508E1de83179E7"
   }
 }
