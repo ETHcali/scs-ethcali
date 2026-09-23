@@ -280,9 +280,31 @@ async function main() {
   let deployed = 0;
   let skipped = 0;
 
+  // SWAG_REDEPLOY_SKUS=SKU1,SKU2 deploys a fresh clone for a SKU that already
+  // exists, superseding the old one (recorded under supersededSwagCollections
+  // so nothing forgets it). Used once on Base to move custody off the Safe
+  // before anything had been minted. Pause the old clone yourself.
+  const redeploy = new Set(
+    (process.env.SWAG_REDEPLOY_SKUS || "").split(",").map((x) => x.trim()).filter(Boolean)
+  );
+  // SWAG_OPERATORS=0x…,0x… gets ADMIN_ROLE on every collection this run
+  // deploys, granted by the deployer while it holds DEFAULT_ADMIN_ROLE.
+  const operators = (process.env.SWAG_OPERATORS || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean) as `0x${string}`[];
+  for (const op of operators) if (!isAddress(op)) throw new Error(`SWAG_OPERATORS entry is not an address: ${op}`);
+
   for (const product of catalogue.products) {
     const existing = existingBySku.get(product.sku);
-    if (existing) {
+    if (existing && redeploy.has(product.sku)) {
+      console.log(`♻️  ${product.name} (${product.sku}) — redeploying; ${existing} will be superseded`);
+      if (!dryRun && fs.existsSync(deploymentPath)) {
+        const d = JSON.parse(fs.readFileSync(deploymentPath, "utf8"));
+        d.supersededSwagCollections = { ...(d.supersededSwagCollections ?? {}), [`${product.sku}@${existing}`]: new Date().toISOString() };
+        fs.writeFileSync(deploymentPath, JSON.stringify(d, null, 2));
+      }
+    } else if (existing) {
       console.log(`⏭  ${product.name} (${product.sku}) — already deployed at ${existing}, skipping`);
       skipped++;
       // Still make sure it can accept vouchers — an earlier run may have had
@@ -383,6 +405,25 @@ async function main() {
 
     // Read the role back — a mined deploy is not proof the signer landed.
     await ensureSigner(collection, product.sku);
+
+    for (const op of operators) {
+      const swag = await viem.getContractAt("Swag1155", collection);
+      const role = (await swag.read.ADMIN_ROLE()) as `0x${string}`;
+      if (await swag.read.hasRole([role, op])) {
+        console.log(`   operator  ✓ ${op} already holds ADMIN_ROLE`);
+        continue;
+      }
+      process.stdout.write(`   operator  addAdmin(${op}) … `);
+      const hash = await swag.write.addAdmin([op]);
+      const rcpt = await publicClient.waitForTransactionReceipt({ hash });
+      if (rcpt.status !== "success") throw new Error(`addAdmin(${op}) reverted (${hash})`);
+      for (let i = 0; i < 20; i++) {
+        if (await swag.read.hasRole([role, op])) break;
+        if (i === 19) throw new Error(`addAdmin mined but ${op} still lacks ADMIN_ROLE`);
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      console.log("ok");
+    }
   }
 
   const spent = startBalance - (await publicClient.getBalance({ address: deployerAddress }));
