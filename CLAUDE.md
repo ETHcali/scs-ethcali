@@ -103,17 +103,51 @@ Every contract follows the same shape — match it rather than inventing a new o
   Assert the rejection and the unchanged balance instead of the message.
 - **Fee-on-transfer tokens**: staking rejects them (a bond must be exact); donations credit
   the measured balance delta (a donation should never be refused).
+- **`Swag1155`'s EIP-712 primary type is `Claim`, not `ClaimVoucher`.** The struct is
+  `ClaimVoucher`; `CLAIM_TYPEHASH` hashes
+  `Claim(uint256 tokenId,address to,uint256 quantity,bytes32 orderRef,uint256 deadline)`
+  under domain `ETHCaliSwag` v1. Signing under the struct's name recovers a stranger and
+  reverts `InvalidSignature`.
+- **`SwagFactory.deployCollection` takes six arguments.** The sixth is the voucher `signer`,
+  granted `SIGNER_ROLE` while the factory still holds `DEFAULT_ADMIN_ROLE`. Pass the zero
+  address and nothing can be claimed until the `itemAdmin` calls `addSigner`.
+- **`setVariant` rejects both caps zero (`EmptyVariant`); `setPaymentOption` rejects a zero
+  price (`ZeroPrice`).** Take a token off sale with `active = false`; give merch away with a
+  signed voucher, never a free price.
 
 ## Deployment
 
 ```bash
-npm run deploy:base | :ethereum | :optimism | :unichain | :celo
-npm run setup:frontend      # regenerates frontend/abis + per-network addresses.json
-npm run verify:<network>
+npm run deploy:<net>              # deploy-all.ts: EVERY contract. Fresh chains only.
+npm run estimate:swag:base        # gas for Swag1155 implementation + SwagFactory
+npm run deploy:swag:base          # deploy-swag.ts: implementation + factory only (needs SWAG_ADMIN)
+SWAG_SIGNER=0x… ITEM_TREASURY=0x… ITEM_ADMIN=0x… npm run seed:swag -- --network base
+npm run seed:swag:dry -- --network base   # validate swag-catalogue.json, send nothing
+npm run setup:frontend            # regenerates frontend/abis + per-network addresses.json
+npm run verify:<net>
 ```
 
-`scripts/deploy-all.ts` reads admins/treasury from `.env`. It prints a manual follow-up
-step when the deployer is not the configured admin — read the output, do not assume the
-role grants happened.
+- **Never run `deploy:<net>` on a chain that already has contracts.** `deploy-all.ts`
+  deploys ZKPassportNFT, FaucetManager, the Swag1155 implementation and a *new* SwagFactory
+  every time. Per-family scripts exist for exactly this reason (`deploy-swag.ts`,
+  `deploy-donations.ts`); add one for a new family rather than reusing deploy-all. The swag
+  scripts are wired for Base only (`deploy:swag:base`, `estimate:swag:base`); add a script
+  entry per chain if swag ever leaves Base.
+- `seed:swag` reads `swag-catalogue.json`, skips SKUs already in the factory registry, and
+  passes `SWAG_SIGNER` as the sixth `deployCollection` argument so `SIGNER_ROLE` lands in the
+  same transaction. `ITEM_TREASURY` / `ITEM_ADMIN` fall back to `SWAG_TREASURY_ADDRESS` /
+  `SWAG_ADMIN`. It refuses to run while any `metadataURI` is still `ipfs://PENDING`.
+- **Public RPCs lag behind their own writes.** Base's RPC load-balances across replicas; a
+  read issued right after a deploy receipt can land on one that has not seen the code yet.
+  The first Base swag deploy died that way *after* both contracts were live and before
+  anything was saved, and the first seed crashed with `contractAddress: undefined` after the
+  collection was already deployed. Both scripts now poll `getBytecode` until code is visible
+  and take the collection address from the transaction's own `CollectionDeployed` log, never
+  from a follow-up `getCollections()` read. Keep that pattern in any new script.
+- `scripts/deploy-all.ts` reads admins/treasury from `.env` and prints a manual follow-up
+  step when the deployer is not the configured admin — read the output, do not assume the
+  role grants happened.
 
-After deploying, copy the new ABIs into `../wallet_ethcali/frontend/abis/`.
+After deploying, run `npm run sync:contracts` in `../wallet_ethcali`: it copies `frontend/`
+from here and records the source commit in `CONTRACTS_SOURCE.json`. Never hand-copy ABIs
+into the wallet app.

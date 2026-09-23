@@ -10,7 +10,7 @@ ecosystem on Base, Ethereum, Unichain, Optimism, and Celo.
 | **ZKPassportNFT** | Soulbound ERC721 — verified identity via ZKPassport |
 | **FaucetManager** | Multi-vault ETH faucet with ZKPassport & ERC-20/ERC-721 token gating |
 | **Swag1155** | ERC-1155 merch proof-of-purchase, one inventory sold through two channels — `buy()` on-chain in any configured token, or `claim()` with an EIP-712 voucher signed after a paid Shopify order. Clone-only. |
-| **SwagFactory** | Clones and configures one `Swag1155` per product; maintains the registry of all collections |
+| **SwagFactory** | Clones and configures one `Swag1155` per `deployCollection` call and keeps the registry. In production: one collection per chain, one tokenId per design |
 | **HackathonStaking** | Commitment bonds for hackathons — stake to register, reclaim on submission, no-show bonds sweep to a prize pool |
 | **DonationVault** | Multi-campaign donation vault — any currency per campaign, on-chain donor attribution, beneficiary-locked withdrawals |
 | **DonationReceipt1155** | Admin-configurable, soulbound-by-default ERC-1155 receipts issued to donors by tier |
@@ -32,7 +32,8 @@ SWAG_ADMIN=0x...
 FAUCET_ADMIN=0x...
 ZK_PASSPORT_ADMIN=0x...
 SWAG_TREASURY_ADDRESS=0x...
-SWAG_SIGNER=0x...            # backend key that signs Shopify claim vouchers (passed to deployCollection by seed:swag)
+SWAG_SIGNER=0x...            # backend key that signs claim vouchers (6th deployCollection arg, passed by seed:swag)
+# seed:swag also accepts ITEM_TREASURY / ITEM_ADMIN; they override SWAG_TREASURY_ADDRESS / SWAG_ADMIN.
 
 # ZKPassport SDK (must match the query built in the frontend)
 ZKPASSPORT_DOMAIN=ethcali.org
@@ -68,21 +69,27 @@ npm run test:all         # Hardhat flows + Foundry invariants — the real gate
 npm test                 # Hardhat suite only
 npm run test:forge       # Foundry invariants only (test:forge:deep before a mainnet deploy)
 
-npm run deploy:base      # Deploy all contracts to Base
-npm run deploy:ethereum  # Deploy all contracts to Ethereum
-npm run deploy:unichain  # Deploy all contracts to Unichain
-npm run deploy:optimism  # Deploy all contracts to Optimism
-npm run deploy:celo      # Deploy all contracts to Celo
+npm run deploy:<net>     # deploy-all.ts — EVERY contract (base|ethereum|unichain|optimism|celo).
+                         # Fresh chains only: on a chain that already has contracts it redeploys
+                         # them all, swag factory included. Use the per-family scripts instead:
+npm run estimate:swag:base   # gas for Swag1155 implementation + SwagFactory
+npm run deploy:swag:base     # Swag1155 implementation + SwagFactory only (needs SWAG_ADMIN)
+npm run deploy:donations:<net>
 
 npm run verify:base      # Verify on Basescan (also :ethereum, :unichain, :optimism, :celo)
 
-npm run setup:frontend   # Generate ABIs & addresses for frontend
+npm run setup:frontend   # Regenerate frontend/ (ABIs, addresses). The wallet app then pulls
+                         # it with `npm run sync:contracts` — never copy ABIs by hand.
 
-# Deploy the products in swag-catalogue.json via SwagFactory (run after deploy:*).
-# Idempotent — skips SKUs already in the registry. SWAG_SIGNER becomes each collection's voucher signer.
+# Deploy the collection in swag-catalogue.json via SwagFactory (run after deploy:swag:base).
+# Idempotent — skips SKUs already in the registry. SWAG_SIGNER becomes the collection's voucher signer.
 SWAG_SIGNER=0x... npm run seed:swag -- --network base
 npm run seed:swag:dry -- --network base   # validate the catalogue, send nothing
 ```
+
+Both swag scripts poll for bytecode before reading back and take the collection address
+from the transaction's own `CollectionDeployed` log: Base's public RPC load-balances across
+replicas, and a read right after a write can land on one that has not seen it yet.
 
 ## Swag1155
 
@@ -90,9 +97,26 @@ One inventory, two sales channels. Shopify owns commerce — catalogue, fiat pri
 discount codes, customer accounts, fulfilment. The contract proves that a specific wallet
 owns a specific item, which is the one thing Shopify cannot do.
 
-Each product is a `Swag1155` **clone** deployed by `SwagFactory`; a directly deployed
-`Swag1155` locks itself in its constructor and can never be initialised. Each size is a
-`tokenId`, 1-indexed in catalogue order.
+Each collection is a `Swag1155` **clone** deployed by `SwagFactory`; a directly deployed
+`Swag1155` locks itself in its constructor and can never be initialised. Each entry of the
+`sizes[]` array given to `deployCollection` becomes a `tokenId`, 1-indexed. The parameter
+is still called `sizes` in the ABI, but the live catalogue uses **one tokenId per design**:
+size is a Shopify variant option recorded on the order, never on chain.
+
+### Live deployment (Base 8453 — the only chain with swag)
+
+| What | Address |
+|------|---------|
+| Collection `ETHCALI-SWAG-2026` | `0xA5C02Ee3029Ce7f0FdD147734D11905E3cA99479` — 17 tokenIds, USDC only, 1 on-chain + 4 voucher units each |
+| `SwagFactory` | `0xb11813d12810f3d432dee99a4f1ef581cf151b37` |
+| `Swag1155` implementation | `0x6fD12Bc4A5fA2ae22e5d8A2c522EC5CF332b2abb` |
+| Treasury | `0xB6BDe4fB6dFBad5488Fa31Edf0F3730D9D86da64` (ethcali.eth Safe) |
+| `itemAdmin` (ADMIN + DEFAULT_ADMIN) | `0x3B89Ad8CC39900778aBCdcc22bc83cAC031A415B` |
+| Voucher signer (`SIGNER_ROLE`) | `0x397798D66f6A563c2Ea51Cd6F0A708c7298062e6` |
+
+Recorded in `deployments/base-latest.json` (`swagConfig`, `swagCollections`). The March 2026
+factories on Base (`0x89fb…1e96`), Optimism and Unichain have no collections and are
+superseded; nothing reads them.
 
 Per variant, supply is split at configuration time into two counters that never touch:
 
@@ -137,19 +161,19 @@ renounces its own roles, and registers the collection.
 
 ```typescript
 await swagFactory.write.deployCollection([
-  "ETH Cali Hoodie",
-  "ETH-CALI-HOODIE-2026",
+  "ETH Cali Swag 2026",
+  "ETHCALI-SWAG-2026",
   TREASURY_ADDRESS,
   ITEM_ADMIN_ADDRESS,
   [
-    {
-      metadataURI: "ipfs://Qm…/hoodie-m.json",
-      onchainCap: 10n,   // sellable via buy()
-      voucherCap: 30n,   // reserved for Shopify — set Shopify inventory to this
+    {                                      // tokenId 1 — one design, not one size
+      metadataURI: "ipfs://bafk…",         // the design's metadata CID
+      onchainCap: 1n,    // sellable via buy()
+      voucherCap: 4n,    // reserved for Shopify + events — set Shopify inventory (all sizes) to this
       active: true,
       payments: [
         { token: USDC_ADDRESS, price: 45_000_000n },                                    // 45 USDC
-        { token: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", price: 18_000_000_000_000_000n }, // 0.018 ETH
+        { token: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", price: 18_000_000_000_000_000n }, // 0.018 ETH (not used live)
       ],
     },
   ],

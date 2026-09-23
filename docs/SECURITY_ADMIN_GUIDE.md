@@ -105,25 +105,35 @@ ACCESS CONTROL (FaucetManager, Swag1155):
 │  DEFAULT_ADMIN_ROLE (Super Admin)                           │
 │  ├── addAdmin()          - Grant ADMIN_ROLE                 │
 │  ├── removeAdmin()       - Revoke ADMIN_ROLE                │
+│  ├── addSigner()         - Grant SIGNER_ROLE (voucher key)  │
+│  ├── removeSigner()      - Revoke SIGNER_ROLE               │
 │  ├── setTreasury()       - Change treasury wallet           │
-│  ├── setUSDC()           - Change USDC contract             │
 │  ├── grantRole()         - Grant any role                   │
 │  └── revokeRole()        - Revoke any role                  │
 │                                                              │
 │  ADMIN_ROLE (Operations)                                     │
-│  ├── setVariant()        - Create/edit products             │
-│  ├── setVariantWithURI() - Create with metadata             │
+│  ├── setVariant()        - Create/edit a tokenId's caps     │
+│  ├── setVariantWithURI() - Same, with a per-token URI       │
 │  ├── setBaseURI()        - Set default metadata URI         │
-│  ├── addRoyalty()        - Add royalty recipient for a product │
-│  ├── clearRoyalties()    - Remove all royalties for a product │
-│  ├── markFulfilled()     - Confirm shipment                 │
-│  ├── addPoapDiscount()   - Add POAP-based discount          │
-│  ├── removePoapDiscount() - Remove POAP discount            │
-│  ├── addHolderDiscount() - Add token holder discount        │
-│  └── removeHolderDiscount() - Remove holder discount        │
+│  ├── setPaymentOption()  - Set unit price in one token      │
+│  ├── removePaymentOption() - Stop accepting a token         │
+│  ├── cancelOrder()       - Burn a refunded order's voucher  │
+│  └── pause() / unpause() - Halt buy() and claim()           │
+│                                                              │
+│  SIGNER_ROLE (backend key, no on-chain calls)               │
+│  └── signs EIP-712 `Claim` vouchers redeemed by claim()     │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+Each collection is a clone deployed by `SwagFactory.deployCollection(name, sku, treasury,
+itemAdmin, sizes, signer)`. The factory grants `itemAdmin` both admin roles and `signer`
+`SIGNER_ROLE`, then renounces its own roles. `SwagFactory` itself has `DEFAULT_ADMIN_ROLE`
+(`addAdmin`/`removeAdmin`) and `ADMIN_ROLE` (`deployCollection`, `setCollectionActive`).
+
+Live on Base (verified 2026-09-23): the collection `0xA5C0…9479` has `itemAdmin`
+`0x3B89…415B` holding **both** `ADMIN_ROLE` and `DEFAULT_ADMIN_ROLE`, signer `0x3977…62e6`,
+treasury = the ethcali.eth Safe. Moving `DEFAULT_ADMIN_ROLE` to the Safe is still open.
 
 ---
 
@@ -137,12 +147,13 @@ ACCESS CONTROL (FaucetManager, Swag1155):
 # ============================================================
 
 # Contract Admins
-SWAG_ADMIN=0x...          # Admin for Swag1155 (can manage products, royalties, admins)
+SWAG_ADMIN=0x...          # SwagFactory admin; itemAdmin of seeded collections (ITEM_ADMIN overrides)
 FAUCET_ADMIN=0x...        # Admin for FaucetManager (can manage vaults, admins)
 ZK_PASSPORT_ADMIN=0x...   # Owner for ZKPassportNFT (can manage metadata)
 
 # Treasury
-SWAG_TREASURY_ADDRESS=0x...  # Receives USDC payments (remainder after royalties)
+SWAG_TREASURY_ADDRESS=0x...  # Receives every on-chain sale, in full (ITEM_TREASURY overrides)
+SWAG_SIGNER=0x...            # Backend key granted SIGNER_ROLE on each seeded collection
 
 # Optional: NFT metadata (can be set post-deployment)
 NFT_IMAGE_URI=ipfs://...
@@ -181,7 +192,10 @@ npx hardhat run scripts/deploy-all.ts --network sepolia
 
 1. **ZKPassportNFT**: Deploys, then transfers ownership to `ZK_PASSPORT_ADMIN`
 2. **FaucetManager**: Deploys, grants admin roles to `FAUCET_ADMIN`
-3. **Swag1155**: Deploys with `SWAG_TREASURY_ADDRESS` (4-param constructor), grants admin roles to `SWAG_ADMIN`
+3. **Swag1155 / SwagFactory**: `deploy-all.ts` (or `deploy:swag:base`) deploys the locked `Swag1155`
+   implementation and a `SwagFactory` with `SWAG_ADMIN` as factory admin. Collections are deployed
+   afterwards by `seed:swag`, which passes `SWAG_TREASURY_ADDRESS`, `SWAG_ADMIN` and `SWAG_SIGNER`
+   to `deployCollection`. Do not run `deploy-all.ts` on a chain that already has contracts.
 
 ---
 
@@ -249,65 +263,35 @@ await swag1155.write.setTreasury(['0xNewTreasury...']);
 const treasury = await swag1155.read.treasury();
 ```
 
-### Swag1155 - Change USDC Contract
+### Swag1155 - Manage Signers
 
 ```typescript
-// Change USDC contract (super admin only)
-await swag1155.write.setUSDC(['0xNewUSDC...']);
+// Grant the backend voucher key (super admin only)
+await swag1155.write.addSigner(['0xBackendSigner...']);
 
-// Get current USDC
-const usdc = await swag1155.read.usdc();
+// Rotate: grant the new key first, swap SWAG_VOUCHER_SIGNER_KEY on Vercel, then revoke the old one
+await swag1155.write.removeSigner(['0xOldSigner...']);
+
+// Check
+const SIGNER_ROLE = await swag1155.read.SIGNER_ROLE();
+const ok = await swag1155.read.hasRole([SIGNER_ROLE, '0xBackendSigner...']);
 ```
 
-### Swag1155 - Manage POAP Discounts
+### Swag1155 - Pause
 
 ```typescript
-// Add POAP-based discount (admin only)
-// Parameters: tokenId, eventId, discountBps (basis points, e.g., 1000 = 10%)
-await swag1155.write.addPoapDiscount([
-  tokenId,        // Product token ID
-  eventId,        // POAP event ID
-  1000n           // 10% discount (1000 basis points)
-]);
-
-// Remove POAP discount by index (admin only)
-await swag1155.write.removePoapDiscount([
-  tokenId,        // Product token ID
-  index           // Index in the discount array
-]);
-
-// Get POAP discounts for a product
-const discounts = await swag1155.read.getPoapDiscounts([tokenId]);
+// ADMIN_ROLE. Blocks buy() and claim(); transfers still work.
+await swag1155.write.pause();
+await swag1155.write.unpause();
 ```
 
-**Security Note**: POAP contract address is set at deployment and cannot be changed.
-
-### Swag1155 - Manage Holder Discounts
+### Swag1155 - Cancel a refunded order
 
 ```typescript
-// Add token holder discount (admin only)
-// Parameters: tokenId, token, discountType, value
-await swag1155.write.addHolderDiscount([
-  tokenId,        // Product token ID
-  '0xToken...',   // Token contract address
-  0,              // Discount type: 0=ERC721, 1=ERC1155, 2=ERC20
-  1000n           // Discount value (basis points for ERC721/1155, threshold for ERC20)
-]);
-
-// Remove holder discount by index (admin only)
-await swag1155.write.removeHolderDiscount([
-  tokenId,        // Product token ID
-  index           // Index in the discount array
-]);
-
-// Get holder discounts for a product
-const discounts = await swag1155.read.getHolderDiscounts([tokenId]);
+// ADMIN_ROLE. Burns the orderRef so its voucher can never mint. Reverts
+// VoucherAlreadyClaimed if the customer already claimed — that refund needs a human.
+await swag1155.write.cancelOrder([orderRef]);
 ```
-
-**Discount Types**:
-- `0` - ERC721: Holder gets discount (value in basis points)
-- `1` - ERC1155: Holder gets discount (value in basis points)
-- `2` - ERC20: Holder with balance >= value gets discount
 
 ---
 
@@ -330,14 +314,14 @@ Setup:
 Recommended Role Distribution:
 
 SUPER_ADMIN (Multisig):
-├── Can add/remove admins
-├── Can change treasury/USDC
+├── Can add/remove admins and voucher signers
+├── Can change the treasury
 └── Rarely used, high security
 
 ADMIN (Individual wallets):
 ├── Daily operations
-├── Create vaults/products
-└── Mark shipments
+├── Create vaults; set caps, prices, pause
+└── Cancel refunded orders' vouchers
 ```
 
 ### 3. Monitor Admin Actions
@@ -350,10 +334,12 @@ event VaultCreated(uint256 indexed vaultId, ...);
 event VaultUpdated(uint256 indexed vaultId, ...);
 
 // Swag1155 events
-event VariantUpdated(uint256 indexed tokenId, ...);
-event AdminAdded(address indexed admin);
-event AdminRemoved(address indexed admin);
-event TreasuryUpdated(address indexed newTreasury);
+event VariantSet(uint256 indexed tokenId, uint128 onchainCap, uint128 voucherCap, bool active);
+event PaymentOptionSet(uint256 indexed tokenId, address indexed token, uint256 price);
+event PaymentOptionRemoved(uint256 indexed tokenId, address indexed token);
+event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
+event OrderCancelled(bytes32 indexed orderRef);
+// role changes are OpenZeppelin RoleGranted / RoleRevoked
 ```
 
 Set up event monitoring with:
@@ -376,46 +362,24 @@ DON'T:
 ❌ Keep large amounts in hot wallet
 ```
 
-### 5. Discount Security
+### 5. Voucher Signer Security
 
-**CRITICAL**: Discounts are additive and can stack to 100% (free product).
+`SIGNER_ROLE` is a hot key by design: it lives on the wallet app's server as
+`SWAG_VOUCHER_SIGNER_KEY` and signs a `Claim` voucher for every paid card or event order.
 
 ```
-DISCOUNT STACKING BEHAVIOR:
-- Multiple POAP discounts add together
-- Multiple holder discounts add together
-- POAP + holder discounts add together
-- Total discount can reach 10000 bps (100% = FREE)
+WHAT A LEAKED SIGNER CAN DO:
+- mint up to voucherCap of every active tokenId, to any address, until revoked
+- NOT touch the on-chain allocation, prices, caps, treasury or roles
 
-ADMIN RESPONSIBILITIES:
-✅ Calculate total possible discount before adding new ones
-✅ Monitor discount combinations per product
-✅ Consider maximum discount caps in your business logic
-✅ Review discount configurations regularly
+CONTAINMENT:
+✅ voucherCap is the ceiling — keep it at the physical stock, never "plenty"
+✅ removeSigner() from the DEFAULT_ADMIN closes it in one transaction
+✅ cancelOrder(orderRef) voids any specific voucher already issued
+✅ pause() stops claim() entirely while you rotate
 
-IMMUTABLE SETTINGS:
-⚠️  POAP contract address is set at deployment
-⚠️  Cannot change POAP contract after deployment
-⚠️  Must redeploy contract to use different POAP contract
-
-DISCOUNT SCOPE:
-- All discounts are per-product (tokenId)
-- Different products can have different discount rules
-- Discounts apply to all buyers meeting criteria
-```
-
-**Example Scenario**:
-```typescript
-// Product #1 has:
-// - POAP discount: 2000 bps (20%)
-// - Holder discount 1: 3000 bps (30%)
-// - Holder discount 2: 2000 bps (20%)
-//
-// A user with all three qualifications gets:
-// Total: 7000 bps (70% off)
-//
-// If admin adds another 3000 bps discount:
-// Total: 10000 bps (100% off = FREE)
+ROTATION:
+1. addSigner(new)   2. swap SWAG_VOUCHER_SIGNER_KEY on Vercel   3. removeSigner(old)
 ```
 
 ---
@@ -511,6 +475,7 @@ const isAdmin = await swag1155.read.isAdmin([address]);
 // AccessControl role identifiers
 const DEFAULT_ADMIN_ROLE = '0x0000000000000000000000000000000000000000000000000000000000000000';
 const ADMIN_ROLE = keccak256(toBytes('ADMIN_ROLE'));
+const SIGNER_ROLE = keccak256(toBytes('SIGNER_ROLE')); // Swag1155 only
 ```
 
 ### Common Operations Checklist
@@ -523,11 +488,9 @@ const ADMIN_ROLE = keccak256(toBytes('ADMIN_ROLE'));
 | Change owner | ZKPassportNFT | `transferOwnership()` | Owner |
 | Create vault | FaucetManager | `createVault()` | ADMIN_ROLE |
 | Update vault gating | FaucetManager | `updateVaultGating()` | ADMIN_ROLE |
-| Create product | Swag1155 | `setVariantWithURI()` | ADMIN_ROLE |
-| Add royalty | Swag1155 | `addRoyalty()` | ADMIN_ROLE |
-| Clear royalties | Swag1155 | `clearRoyalties()` | ADMIN_ROLE |
-| Add POAP discount | Swag1155 | `addPoapDiscount()` | ADMIN_ROLE |
-| Remove POAP discount | Swag1155 | `removePoapDiscount()` | ADMIN_ROLE |
-| Add holder discount | Swag1155 | `addHolderDiscount()` | ADMIN_ROLE |
-| Remove holder discount | Swag1155 | `removeHolderDiscount()` | ADMIN_ROLE |
+| Configure a tokenId's caps / URI | Swag1155 | `setVariant()` / `setVariantWithURI()` | ADMIN_ROLE |
+| Set / remove a price | Swag1155 | `setPaymentOption()` / `removePaymentOption()` | ADMIN_ROLE |
+| Cancel a refunded order's voucher | Swag1155 | `cancelOrder()` | ADMIN_ROLE |
+| Add / remove voucher signer | Swag1155 | `addSigner()` / `removeSigner()` | DEFAULT_ADMIN_ROLE |
+| Deploy a collection | SwagFactory | `deployCollection()` | ADMIN_ROLE (factory) |
 | Pause | FaucetManager | `pause()` | ADMIN_ROLE |

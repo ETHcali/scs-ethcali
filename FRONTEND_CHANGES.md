@@ -259,7 +259,7 @@ const meta = await readContract({ address: swagFactoryAddress, abi: SwagFactory_
 
 ### Read a variant
 
-Each size is a `tokenId` (1-indexed). Prices are **per payment token**, in that token's own base units.
+Each design is a `tokenId` (1-indexed; size is off-chain, on the order). Prices are **per payment token**, in that token's own base units.
 
 ```typescript
 const tokenIds = await readContract({ address: collection, abi: Swag1155_ABI, functionName: 'listTokenIds' });
@@ -319,7 +319,7 @@ await writeContractAsync({ address: collection, abi: Swag1155_ABI,
 |---|---|
 | `VariantNotFound`, `VariantNotActive` | not for sale |
 | `SoldOut(tokenId, remaining)` | only `remaining` left in this channel |
-| `PaymentTokenNotAccepted(tokenId, token)` | token not accepted for this size |
+| `PaymentTokenNotAccepted(tokenId, token)` | token not accepted for this tokenId |
 | `IncorrectEthAmount(expected, sent)` | send exactly `expected` |
 | `EthNotAccepted` | do not send ETH with an ERC-20 purchase |
 | `VoucherExpired(deadline)` / `VoucherAlreadyClaimed(orderRef)` / `InvalidSignature` | voucher expired / already used or cancelled / not issued for this collection |

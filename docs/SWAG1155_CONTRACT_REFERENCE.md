@@ -15,18 +15,21 @@ fulfilment, shipping. None of that is on-chain. What Shopify cannot do is prove 
 specific wallet owns a specific item — that is this contract.
 
 ```
-SwagFactory (one per network, address in frontend/addresses.json)
-  └── ETH Cali Hoodie  → Swag1155 clone @ 0xAAA…
-        tokenId 1 = S   onchainCap 6  / voucherCap 19   USDC 45, ETH 0.018
-        tokenId 2 = M   onchainCap 10 / voucherCap 30
+SwagFactory (Base, 0xb11813d12810f3d432dee99a4f1ef581cf151b37)
+  └── ETHCALI-SWAG-2026 → Swag1155 clone @ 0xA5C02Ee3029Ce7f0FdD147734D11905E3cA99479
+        tokenId 1  = Privacy is Freedom cap (octahedron)  onchainCap 1 / voucherCap 4   USDC 15
+        tokenId 2  = Privacy is Freedom cap (phrase)      onchainCap 1 / voucherCap 4   USDC 15
         …
-  └── ETH Cali Tee     → Swag1155 clone @ 0xBBB…
+        tokenId 17 = Doge — Merkle Collection tee         onchainCap 1 / voucherCap 4
 ```
 
-- **One `Swag1155` per product**, deployed as an EIP-1167 clone by `SwagFactory.deployCollection`.
-  The implementation's constructor sets `_initialized = true`, so a directly deployed
-  `Swag1155` can never be configured. **Always get instances from the factory.**
-- **Each size is a `tokenId`**, 1-indexed in the order passed to `deployCollection`.
+- **One `Swag1155` per `deployCollection` call**, an EIP-1167 clone. The implementation's
+  constructor sets `_initialized = true`, so a directly deployed `Swag1155` can never be
+  configured. **Always get instances from the factory.** The factory can hold many
+  collections; the live deployment has exactly one, on Base only.
+- **Each entry of `sizes[]` is a `tokenId`**, 1-indexed in the order passed to
+  `deployCollection`. The parameter keeps its historical name, but **one tokenId is one
+  design**: size is a Shopify variant option recorded on the order, never on chain.
 - **Supply is split per variant into two counters that never touch:**
 
 | Bucket | Channel | Entry point |
@@ -146,7 +149,7 @@ would report as `VariantNotFound`, and never lists the same id twice.
 | `setVariant(tokenId, onchainCap, voucherCap, active)` | ADMIN | Create or reconfigure. Reverts `EmptyVariant` if both caps are 0 (deactivate instead), `CapBelowMinted` if either cap is below that channel's minted count — caps only move up once selling. Registers the id in `listTokenIds()` once, however often it is reconfigured. |
 | `setVariantWithURI(tokenId, onchainCap, voucherCap, active, metadataURI)` | ADMIN | Same plus a per-token URI. `EmptyURI` if blank. |
 | `setBaseURI(uri)` | ADMIN | Fallback for tokens with no per-token URI. |
-| `setPaymentOption(tokenId, token, price)` | ADMIN | Accept `token` for this size at `price` **in that token's base units** (45 USDC = `45_000_000`; 0.018 ETH = `18_000_000_000_000_000`). Use `ETH_TOKEN` for native. Overwrites an existing price. Reverts `ZeroPrice` on 0 — free distribution is a signed `claim()` voucher, never a zero price. |
+| `setPaymentOption(tokenId, token, price)` | ADMIN | Accept `token` for this tokenId at `price` **in that token's base units** (45 USDC = `45_000_000`; 0.018 ETH = `18_000_000_000_000_000`). Use `ETH_TOKEN` for native. Overwrites an existing price. Reverts `ZeroPrice` on 0 — free distribution is a signed `claim()` voucher, never a zero price. |
 | `removePaymentOption(tokenId, token)` | ADMIN | |
 | `cancelOrder(orderRef)` | ADMIN | Close a refunded / fraudulent Shopify order: marks `orderClaimed[orderRef] = true` and emits `OrderCancelled`. Reverts `VoucherAlreadyClaimed` if the ref is already spent by a claim **or** an earlier cancel — a cancel after the customer minted must be loud. |
 | `pause()` / `unpause()` | ADMIN | Blocks `buy` and `claim`. Transfers still work. |
@@ -199,8 +202,8 @@ const voucher = {
   tokenId:  1n,
   to:       customerWallet,
   quantity: BigInt(lineItem.quantity),
-  orderRef: keccak256(toBytes(`shopify:${order.id}`)),   // idempotent per order → replayed webhook = same voucher
-  deadline: BigInt(Math.floor(Date.now() / 1000) + 90 * 24 * 3600),
+  orderRef: keccak256(toBytes(`${order.admin_graphql_api_id}:${lineItem.id}`)), // per line item; a replayed webhook = same voucher
+  deadline: BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 3600),
 };
 
 const signature = await signerAccount.signTypedData({
@@ -217,9 +220,12 @@ const signature = await signerAccount.signTypedData({
 });
 ```
 
-`hashVoucher(voucher)` returns the exact digest the contract will verify — useful to
-cross-check a backend implementation. One Shopify line item with several sizes needs one
-voucher per `tokenId`, each with its own `orderRef` (e.g. `shopify:<order>:<lineItem>`).
+`hashVoucher(voucher)` returns the exact digest the contract will verify — the wallet's
+`scripts/swag-voucher-selftest.mjs` compares it with the server's local digest. `orderRef`
+is **per line item**, not per order: `orderClaimed[orderRef]` is burned once, so an order
+with two designs hashed per order would let only the first claim through. The wallet's
+implementation is `wallet_ethcali/lib/swag/voucher.ts` (`Claim` primary type, 7-day
+deadline).
 
 ---
 
@@ -294,15 +300,36 @@ event SerialsAssigned(uint256 indexed tokenId, address indexed to, uint256 first
 
 ## 9. Operations checklist
 
-1. `npm run deploy:<net>` — deploys the `Swag1155` implementation and `SwagFactory`, writes
-   `swag1155Implementation` + `swagFactory` to `deployments/<net>-latest.json`.
-2. Fill `swag-catalogue.json` (copy `swag-catalogue.example.json`). Human-readable prices;
-   `voucherCap` per size = the Shopify inventory you will set.
-3. `SWAG_SIGNER=<backend address> npm run seed:swag -- --network <net>` — deploys one
-   collection per SKU with `SWAG_SIGNER` as its voucher signer. Without `SWAG_SIGNER` it
-   warns loudly and **no voucher can be claimed** until the `itemAdmin` calls `addSigner`.
-4. Set each Shopify product's inventory to its `voucherCap`.
-5. `npm run verify:<net>`, `npm run setup:frontend`, copy ABIs to `wallet_ethcali/frontend/abis/`.
+1. `npm run deploy:swag:base` (`deploy-swag.ts`) — deploys the `Swag1155` implementation and
+   `SwagFactory`, writes `swag1155Implementation` + `swagFactory` to
+   `deployments/base-latest.json`. Only Base is wired; add a script entry per chain if swag
+   ever leaves Base. **Do not use `deploy:<net>`** on a chain that already has contracts —
+   `deploy-all.ts` redeploys everything.
+2. Fill `swag-catalogue.json` (copy `swag-catalogue.example.json`). Human-readable USD
+   prices; `voucherCap` per design = the Shopify inventory summed across that design's sizes.
+   CIDs come from `wallet_ethcali/scripts/swag-pin.mjs`; the seeder refuses `ipfs://PENDING`.
+3. `SWAG_SIGNER=<backend address> npm run seed:swag -- --network base` — deploys one
+   collection per catalogue product (one, `ETHCALI-SWAG-2026`) with `SWAG_SIGNER` as its
+   voucher signer. Without `SWAG_SIGNER` it warns loudly and **no voucher can be claimed**
+   until the `itemAdmin` calls `addSigner`. Both scripts poll for bytecode and read the
+   collection address from the receipt's `CollectionDeployed` log — public RPC replicas lag.
+4. Set each Shopify product's inventory to its `voucherCap` (`shopify-sync.mjs` does this).
+5. `npm run verify:base`, `npm run setup:frontend`, then `npm run sync:contracts` in
+   `wallet_ethcali`. Never copy ABIs by hand.
+
+### Live deployment (Base 8453)
+
+| What | Address |
+|------|---------|
+| Collection `ETHCALI-SWAG-2026` | `0xA5C02Ee3029Ce7f0FdD147734D11905E3cA99479` |
+| `SwagFactory` | `0xb11813d12810f3d432dee99a4f1ef581cf151b37` |
+| `Swag1155` implementation | `0x6fD12Bc4A5fA2ae22e5d8A2c522EC5CF332b2abb` |
+| Treasury | `0xB6BDe4fB6dFBad5488Fa31Edf0F3730D9D86da64` (ethcali.eth Safe) |
+| `itemAdmin` — holds `ADMIN_ROLE` **and** `DEFAULT_ADMIN_ROLE` | `0x3B89Ad8CC39900778aBCdcc22bc83cAC031A415B` |
+| `SIGNER_ROLE` | `0x397798D66f6A563c2Ea51Cd6F0A708c7298062e6` |
+
+17 tokenIds, USDC (`0x8335…2913`) the only payment token, `onchainCap 1 / voucherCap 4`
+each. Verified on chain 2026-09-23.
 
 Tests: `test/Swag1155.test.ts`, `test/SwagFactory.test.ts` (Hardhat flows) and
 `test/forge/Swag1155.invariants.t.sol` (Foundry: caps never exceeded, supply == channel
