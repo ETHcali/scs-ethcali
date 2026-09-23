@@ -14,7 +14,10 @@
     "Caps can be raised later, never lowered below what has been minted.",
     "",
     "imageCid / metadataCid are filled by wallet_ethcali/scripts/swag-pin.mjs. The seeder refuses",
-    "to run while any metadataURI is still ipfs://PENDING."
+    "to run while any metadataURI is still ipfs://PENDING.",
+    "",
+    "prices.USDC is the ON-CHAIN price and already carries usdcDiscountPct off priceUsd (the card/list price).",
+    "Change priceUsd, re-run the discount, then scripts/sync-swag-onchain.ts."
   ],
   "chain": "base",
   "products": [
@@ -45,7 +48,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "15"
+            "USDC": "13.5"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657022138",
@@ -60,7 +63,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:47.028Z"
-          }
+          },
+          "priceUsd": "15"
         },
         {
           "label": "Privacy is Freedom cap — Phrase",
@@ -84,7 +88,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "15"
+            "USDC": "13.5"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657120442",
@@ -99,7 +103,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:47.528Z"
-          }
+          },
+          "priceUsd": "15"
         },
         {
           "label": "Ethereum cap",
@@ -123,7 +128,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "15"
+            "USDC": "13.5"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657185978",
@@ -138,7 +143,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:48.051Z"
-          }
+          },
+          "priceUsd": "15"
         },
         {
           "label": "OP Mainnet cap",
@@ -162,7 +168,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "15"
+            "USDC": "13.5"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657251514",
@@ -177,7 +183,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:48.663Z"
-          }
+          },
+          "priceUsd": "15"
         },
         {
           "label": "Uniswap cap",
@@ -201,7 +208,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "15"
+            "USDC": "13.5"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657317050",
@@ -216,7 +223,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:49.158Z"
-          }
+          },
+          "priceUsd": "15"
         },
         {
           "label": "Pepe cap",
@@ -240,7 +248,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "15"
+            "USDC": "13.5"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657415354",
@@ -255,7 +263,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:49.699Z"
-          }
+          },
+          "priceUsd": "15"
         },
         {
           "label": "Ethereans mug",
@@ -279,7 +288,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "10"
+            "USDC": "9"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657480890",
@@ -294,7 +303,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:50.197Z"
-          }
+          },
+          "priceUsd": "10"
         },
         {
           "label": "Ethereum mug",
@@ -318,7 +328,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "10"
+            "USDC": "9"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657546426",
@@ -333,7 +343,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:50.671Z"
-          }
+          },
+          "priceUsd": "10"
         },
         {
           "label": "ETHGlobal mug",
@@ -357,7 +368,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "10"
+            "USDC": "9"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657611962",
@@ -372,7 +383,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:51.212Z"
-          }
+          },
+          "priceUsd": "10"
         },
         {
           "label": "Cyber Doge mug",
@@ -396,7 +408,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "10"
+            "USDC": "9"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657677498",
@@ -411,7 +423,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:51.722Z"
-          }
+          },
+          "priceUsd": "10"
         },
         {
           "label": "Colombian Collaborative hoodie",
@@ -440,7 +453,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "50"
+            "USDC": "45"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657775802",
@@ -476,7 +489,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:52.245Z"
-          }
+          },
+          "priceUsd": "50"
         },
         {
           "label": "Black hoodie",
@@ -505,7 +519,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "50"
+            "USDC": "45"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657841338",
@@ -541,7 +555,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:52.650Z"
-          }
+          },
+          "priceUsd": "50"
         },
         {
           "label": "Community Edition hoodie",
@@ -570,7 +585,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "50"
+            "USDC": "45"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554657906874",
@@ -606,7 +621,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:53.119Z"
-          }
+          },
+          "priceUsd": "50"
         },
         {
           "label": "Uniswap × Cali t-shirt",
@@ -635,7 +651,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "30"
+            "USDC": "27"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554658005178",
@@ -671,7 +687,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:53.682Z"
-          }
+          },
+          "priceUsd": "30"
         },
         {
           "label": "Impact t-shirt",
@@ -700,7 +717,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "30"
+            "USDC": "27"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554658070714",
@@ -736,7 +753,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:54.225Z"
-          }
+          },
+          "priceUsd": "30"
         },
         {
           "label": "Robot t-shirt",
@@ -765,7 +783,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "30"
+            "USDC": "27"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554658169018",
@@ -801,7 +819,8 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:54.694Z"
-          }
+          },
+          "priceUsd": "30"
         },
         {
           "label": "Doge t-shirt — Merkle Collection",
@@ -830,7 +849,7 @@
           "voucherCap": 4,
           "active": true,
           "prices": {
-            "USDC": "30"
+            "USDC": "27"
           },
           "shopify": {
             "productId": "gid://shopify/Product/8554658234554",
@@ -866,9 +885,11 @@
               }
             ],
             "syncedAt": "2026-09-23T05:36:55.213Z"
-          }
+          },
+          "priceUsd": "30"
         }
-      ]
+      ],
+      "usdcDiscountPct": 10
     }
   ]
 }
