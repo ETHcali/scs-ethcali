@@ -56,3 +56,6 @@ forge-cache/
 
 # Claude Code — personal local settings (shared config lives in CLAUDE.md/.mcp.json)
 .claude/settings.local.json
+
+# Claude Code agent worktrees
+.claude/worktrees/
