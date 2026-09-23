@@ -102,7 +102,7 @@ function MyComponent({ chainId }: { chainId: number }) {
 - **Base Mainnet** (Chain ID: 8453)
   - ZKPassportNFT: `0xa3f1150a8414b0383244e7c7936119e3e24d106d`
   - FaucetManager: `0x145d0d587bce7e390750cd67301e02478c51b48c`
-  - SwagFactory: `0x89fb2a22bbb309703019b34439ae70b7e6d81e96`
+  - SwagFactory: `0xb11813d12810f3d432dee99a4f1ef581cf151b37`
 
 - **Ethereum Mainnet** (Chain ID: 1)
   - ZKPassportNFT: `0x607003f188c49ed6e0553805734b9990393402df`

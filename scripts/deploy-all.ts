@@ -14,10 +14,14 @@ const __dirname = path.dirname(__filename);
  * Deploys all contracts with proper admin/treasury configuration from .env
  *
  * Deploys infrastructure contracts only:
- *   ZKPassportNFT + FaucetManager + SwagFactory
+ *   ZKPassportNFT + FaucetManager + Swag1155 implementation + SwagFactory
+ *   + HackathonStaking + DonationVault + DonationReceipt1155
  *
- * Products (Swag1155) are NOT deployed here.
- * Use scripts/deploy-collection.ts to create products via the factory.
+ * Products (Swag1155 clones) are NOT deployed here. Afterwards run
+ *   SWAG_SIGNER=0x... npm run seed:swag -- --network <net>
+ * which reads swag-catalogue.json, deploys one collection per SKU through the
+ * factory (reading `swagFactory` from deployments/<net>-latest.json) and grants
+ * the backend voucher signer.
  *
  * Security Model:
  * - ZKPassportNFT: Uses Ownable (single owner, can transfer)
@@ -166,6 +170,19 @@ async function main() {
     throw new Error("Missing required addresses in .env (SWAG_ADMIN, FAUCET_ADMIN, ZK_PASSPORT_ADMIN, SWAG_TREASURY_ADDRESS)");
   }
 
+  /**
+   * Send a write and WAIT for it to be mined. Consecutive writes that do not
+   * wait estimate gas against stale state and can race on nonce — exactly how
+   * the first Celo deploy failed partway through role setup.
+   */
+  const send = async (label: string, fn: () => Promise<`0x${string}`>) => {
+    process.stdout.write(`   ${label} … `);
+    const hash = await fn();
+    const rcpt = await publicClient.waitForTransactionReceipt({ hash });
+    console.log(rcpt.status === "success" ? "ok" : "FAILED");
+    if (rcpt.status !== "success") throw new Error(`${label} reverted (${hash})`);
+  };
+
   // Get USDC address or deploy mock for testnets
   let usdcAddress = config.usdcAddress;
   if (!usdcAddress) {
@@ -193,15 +210,17 @@ async function main() {
 
   // Set metadata if configured
   const [deployer] = await viem.getWalletClients();
+  const nftImageUri = process.env.NFT_IMAGE_URI;
+  const nftDescription = process.env.NFT_DESCRIPTION;
   if (
     deployer.account.address.toLowerCase() === config.zkPassportAdmin.toLowerCase() &&
-    process.env.NFT_IMAGE_URI &&
-    process.env.NFT_DESCRIPTION
+    nftImageUri &&
+    nftDescription
   ) {
     console.log(`   Setting NFT metadata...`);
     await send("set ZKPassport metadata", () => zkPassportNFT.write.setMetadata([
-      process.env.NFT_IMAGE_URI,
-      process.env.NFT_DESCRIPTION,
+      nftImageUri,
+      nftDescription,
       process.env.NFT_EXTERNAL_URL || "",
       true,
     ]));
@@ -265,19 +284,6 @@ async function main() {
   // exists on chains where it has been deployed. An admin with no code on Celo
   // cannot sign anything there. A plain EOA works on every chain.
   const deployerAddress = deployer.account.address as `0x${string}`;
-
-  /**
-   * Send a write and WAIT for it to be mined. Consecutive writes that do not
-   * wait estimate gas against stale state and can race on nonce — exactly how
-   * the first Celo deploy failed partway through role setup.
-   */
-  const send = async (label: string, fn: () => Promise<`0x${string}`>) => {
-    process.stdout.write(`   ${label} … `);
-    const hash = await fn();
-    const rcpt = await publicClient.waitForTransactionReceipt({ hash });
-    console.log(rcpt.status === "success" ? "ok" : "FAILED");
-    if (rcpt.status !== "success") throw new Error(`${label} reverted (${hash})`);
-  };
 
   console.log("\n📦 Deploying DonationReceipt1155...");
   const donationReceipt = await viem.deployContract("DonationReceipt1155", [
@@ -435,16 +441,21 @@ FaucetManager (Admin: ${config.faucetAdmin}):
   - setNFTContract(addr)   - Change ZKPassport contract
 
 SwagFactory (${swagFactoryAddress}):
-  - deployCollection(name, sku, paymentToken, treasury, itemAdmin, sizes[])
-      Deploys a new Swag1155 per product, configures all sizes, grants
-      itemAdmin full control, and registers it in the factory registry.
+  - deployCollection(name, sku, treasury, itemAdmin, sizes[], signer)
+      Clones the Swag1155 implementation (${swag1155ImplAddress}), configures
+      every size (onchainCap / voucherCap / payment options), grants itemAdmin
+      full control and `signer` SIGNER_ROLE (zero address = none), and
+      registers the collection.
   - setCollectionActive(collection, bool) - Show/hide product in storefront
   - addAdmin(address) / removeAdmin(address)
 
-  To create a product:
-    ITEM_NAME="ETH Cali Hoodie" ITEM_SKU="ETH-CALI-HOODIE-2025" \\
-    ITEM_ADMIN=0x... ITEM_SIZES_JSON='[...]' \\
-    npx hardhat run scripts/deploy-collection.ts --network <network>
+  To create the products in swag-catalogue.json:
+    SWAG_SIGNER=0x<backend voucher signer> npm run seed:swag -- --network <network>
+
+  ⚠️  Set SWAG_SIGNER. The seeder passes it into deployCollection so each new
+      collection can verify vouchers from block one. Without it a collection
+      has no signer and every Shopify voucher claim() on it reverts with
+      InvalidSignature until the itemAdmin calls addSigner(<backend key>).
 `);
 }
 

@@ -26,6 +26,48 @@
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "AlreadyInitialized",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "CapBelowMinted",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "DirectEthNotAccepted",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ECDSAInvalidSignature",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "length",
+        "type": "uint256"
+      }
+    ],
+    "name": "ECDSAInvalidSignatureLength",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "s",
+        "type": "bytes32"
+      }
+    ],
+    "name": "ECDSAInvalidSignatureS",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -129,34 +171,182 @@
   },
   {
     "inputs": [],
+    "name": "EmptyURI",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "EmptyVariant",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "EnforcedPause",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "EthNotAccepted",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "EthTransferFailed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ExpectedPause",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "expected",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "sent",
+        "type": "uint256"
+      }
+    ],
+    "name": "IncorrectEthAmount",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidRecipient",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidShortString",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidSignature",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidTreasury",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "name": "PaymentTokenNotAccepted",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "ReentrancyGuardReentrantCall",
     "type": "error"
   },
   {
-    "anonymous": false,
     "inputs": [
       {
-        "indexed": true,
         "internalType": "address",
-        "name": "admin",
+        "name": "token",
         "type": "address"
       }
     ],
-    "name": "AdminAdded",
-    "type": "event"
+    "name": "SafeERC20FailedOperation",
+    "type": "error"
   },
   {
-    "anonymous": false,
     "inputs": [
       {
-        "indexed": true,
-        "internalType": "address",
-        "name": "admin",
-        "type": "address"
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "remaining",
+        "type": "uint256"
       }
     ],
-    "name": "AdminRemoved",
-    "type": "event"
+    "name": "SoldOut",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "str",
+        "type": "string"
+      }
+    ],
+    "name": "StringTooLong",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "VariantNotActive",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "VariantNotFound",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "orderRef",
+        "type": "bytes32"
+      }
+    ],
+    "name": "VoucherAlreadyClaimed",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "deadline",
+        "type": "uint256"
+      }
+    ],
+    "name": "VoucherExpired",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroPrice",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroQuantity",
+    "type": "error"
   },
   {
     "anonymous": false,
@@ -188,36 +378,36 @@
     "inputs": [
       {
         "indexed": true,
-        "internalType": "address",
-        "name": "buyer",
-        "type": "address"
-      },
-      {
-        "indexed": true,
         "internalType": "uint256",
         "name": "tokenId",
         "type": "uint256"
       },
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
-        "name": "paymentToken",
+        "name": "to",
         "type": "address"
       },
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "originalPrice",
+        "name": "quantity",
         "type": "uint256"
       },
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "finalPrice",
-        "type": "uint256"
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "orderRef",
+        "type": "bytes32"
       }
     ],
-    "name": "DiscountApplied",
+    "name": "Claimed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [],
+    "name": "EIP712DomainChanged",
     "type": "event"
   },
   {
@@ -225,49 +415,25 @@
     "inputs": [
       {
         "indexed": true,
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "token",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "enum Swag1155.DiscountType",
-        "name": "discountType",
-        "type": "uint8"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "value",
-        "type": "uint256"
+        "internalType": "bytes32",
+        "name": "orderRef",
+        "type": "bytes32"
       }
     ],
-    "name": "HolderDiscountAdded",
+    "name": "OrderCancelled",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "indexed": true,
+        "indexed": false,
         "internalType": "address",
-        "name": "token",
+        "name": "account",
         "type": "address"
       }
     ],
-    "name": "HolderDiscountRemoved",
+    "name": "Paused",
     "type": "event"
   },
   {
@@ -324,85 +490,10 @@
         "type": "uint256"
       },
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "eventId",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "discountBps",
-        "type": "uint256"
-      }
-    ],
-    "name": "PoapDiscountAdded",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "eventId",
-        "type": "uint256"
-      }
-    ],
-    "name": "PoapDiscountRemoved",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "eventId",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "address[]",
-        "name": "addresses",
-        "type": "address[]"
-      },
-      {
-        "indexed": false,
-        "internalType": "bool",
-        "name": "added",
-        "type": "bool"
-      }
-    ],
-    "name": "PoapWhitelistUpdated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
         "indexed": true,
         "internalType": "address",
         "name": "buyer",
         "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
       },
       {
         "indexed": false,
@@ -419,98 +510,11 @@
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "unitPrice",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "totalPrice",
+        "name": "paid",
         "type": "uint256"
       }
     ],
     "name": "Purchased",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "buyer",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256[]",
-        "name": "tokenIds",
-        "type": "uint256[]"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256[]",
-        "name": "quantities",
-        "type": "uint256[]"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "paymentToken",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "totalPrice",
-        "type": "uint256"
-      }
-    ],
-    "name": "PurchasedBatch",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "owner",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "admin",
-        "type": "address"
-      }
-    ],
-    "name": "RedemptionFulfilled",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "owner",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      }
-    ],
-    "name": "RedemptionRequested",
     "type": "event"
   },
   {
@@ -596,59 +600,27 @@
         "internalType": "uint256",
         "name": "tokenId",
         "type": "uint256"
-      }
-    ],
-    "name": "RoyaltiesCleared",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
       },
       {
         "indexed": true,
         "internalType": "address",
-        "name": "recipient",
+        "name": "to",
         "type": "address"
       },
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "percentage",
-        "type": "uint256"
-      }
-    ],
-    "name": "RoyaltyAdded",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "buyer",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "tokenId",
+        "name": "firstSerial",
         "type": "uint256"
       },
       {
-        "indexed": true,
+        "indexed": false,
         "internalType": "uint256",
-        "name": "serial",
+        "name": "quantity",
         "type": "uint256"
       }
     ],
-    "name": "SerialMinted",
+    "name": "SerialsAssigned",
     "type": "event"
   },
   {
@@ -731,6 +703,12 @@
       {
         "indexed": true,
         "internalType": "address",
+        "name": "oldTreasury",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
         "name": "newTreasury",
         "type": "address"
       }
@@ -761,19 +739,13 @@
     "anonymous": false,
     "inputs": [
       {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
         "indexed": false,
-        "internalType": "string",
-        "name": "uri",
-        "type": "string"
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
       }
     ],
-    "name": "VariantURISet",
+    "name": "Unpaused",
     "type": "event"
   },
   {
@@ -787,9 +759,15 @@
       },
       {
         "indexed": false,
-        "internalType": "uint256",
-        "name": "maxSupply",
-        "type": "uint256"
+        "internalType": "uint128",
+        "name": "onchainCap",
+        "type": "uint128"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint128",
+        "name": "voucherCap",
+        "type": "uint128"
       },
       {
         "indexed": false,
@@ -798,7 +776,7 @@
         "type": "bool"
       }
     ],
-    "name": "VariantUpdated",
+    "name": "VariantSet",
     "type": "event"
   },
   {
@@ -842,12 +820,12 @@
   },
   {
     "inputs": [],
-    "name": "ROYALTY_DENOMINATOR",
+    "name": "SIGNER_ROLE",
     "outputs": [
       {
-        "internalType": "uint256",
+        "internalType": "bytes32",
         "name": "",
-        "type": "uint256"
+        "type": "bytes32"
       }
     ],
     "stateMutability": "view",
@@ -869,96 +847,12 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
         "internalType": "address",
-        "name": "token",
+        "name": "signer",
         "type": "address"
-      },
-      {
-        "internalType": "enum Swag1155.DiscountType",
-        "name": "discountType",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint256",
-        "name": "value",
-        "type": "uint256"
       }
     ],
-    "name": "addHolderDiscount",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "eventId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "discountBps",
-        "type": "uint256"
-      }
-    ],
-    "name": "addPoapDiscount",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "eventId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address[]",
-        "name": "addresses",
-        "type": "address[]"
-      }
-    ],
-    "name": "addPoapWhitelist",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address",
-        "name": "recipient",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "percentage",
-        "type": "uint256"
-      }
-    ],
-    "name": "addRoyalty",
+    "name": "addSigner",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1037,14 +931,14 @@
   {
     "inputs": [
       {
-        "internalType": "uint256[]",
-        "name": "tokenIds",
-        "type": "uint256[]"
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
       },
       {
-        "internalType": "uint256[]",
-        "name": "quantities",
-        "type": "uint256[]"
+        "internalType": "uint256",
+        "name": "quantity",
+        "type": "uint256"
       },
       {
         "internalType": "address",
@@ -1052,20 +946,87 @@
         "type": "address"
       }
     ],
-    "name": "buyBatch",
-    "outputs": [],
-    "stateMutability": "payable",
+    "name": "canBuy",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "allowed",
+        "type": "bool"
+      },
+      {
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "tokenId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "to",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "quantity",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "orderRef",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "deadline",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct Swag1155.ClaimVoucher",
+        "name": "voucher",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes",
+        "name": "signature",
+        "type": "bytes"
       }
     ],
-    "name": "clearRoyalties",
+    "name": "canClaim",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "allowed",
+        "type": "bool"
+      },
+      {
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "orderRef",
+        "type": "bytes32"
+      }
+    ],
+    "name": "cancelOrder",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1073,91 +1034,85 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address",
-        "name": "buyer",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "paymentToken",
-        "type": "address"
-      }
-    ],
-    "name": "getDiscountedPrice",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "finalPrice",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      }
-    ],
-    "name": "getHolderDiscounts",
-    "outputs": [
-      {
         "components": [
           {
-            "internalType": "address",
-            "name": "token",
-            "type": "address"
-          },
-          {
-            "internalType": "enum Swag1155.DiscountType",
-            "name": "discountType",
-            "type": "uint8"
-          },
-          {
             "internalType": "uint256",
-            "name": "value",
+            "name": "tokenId",
             "type": "uint256"
           },
           {
-            "internalType": "bool",
-            "name": "active",
-            "type": "bool"
+            "internalType": "address",
+            "name": "to",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "quantity",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "orderRef",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "deadline",
+            "type": "uint256"
           }
         ],
-        "internalType": "struct Swag1155.HolderDiscount[]",
-        "name": "",
-        "type": "tuple[]"
+        "internalType": "struct Swag1155.ClaimVoucher",
+        "name": "voucher",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes",
+        "name": "signature",
+        "type": "bytes"
       }
     ],
-    "stateMutability": "view",
+    "name": "claim",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      }
-    ],
-    "name": "getPaymentOptions",
+    "inputs": [],
+    "name": "eip712Domain",
     "outputs": [
       {
-        "internalType": "address[]",
-        "name": "tokens",
-        "type": "address[]"
+        "internalType": "bytes1",
+        "name": "fields",
+        "type": "bytes1"
+      },
+      {
+        "internalType": "string",
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "version",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "chainId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "verifyingContract",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "salt",
+        "type": "bytes32"
       },
       {
         "internalType": "uint256[]",
-        "name": "prices",
+        "name": "extensions",
         "type": "uint256[]"
       }
     ],
@@ -1172,53 +1127,12 @@
         "type": "uint256"
       }
     ],
-    "name": "getPoapDiscounts",
+    "name": "getPaymentTokens",
     "outputs": [
       {
-        "components": [
-          {
-            "internalType": "uint256",
-            "name": "eventId",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "discountBps",
-            "type": "uint256"
-          },
-          {
-            "internalType": "bool",
-            "name": "active",
-            "type": "bool"
-          }
-        ],
-        "internalType": "struct Swag1155.PoapDiscount[]",
+        "internalType": "address[]",
         "name": "",
-        "type": "tuple[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address",
-        "name": "owner",
-        "type": "address"
-      }
-    ],
-    "name": "getRedemptionStatus",
-    "outputs": [
-      {
-        "internalType": "enum Swag1155.RedemptionStatus",
-        "name": "",
-        "type": "uint8"
+        "type": "address[]"
       }
     ],
     "stateMutability": "view",
@@ -1238,61 +1152,6 @@
         "internalType": "bytes32",
         "name": "",
         "type": "bytes32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      }
-    ],
-    "name": "getRoyalties",
-    "outputs": [
-      {
-        "components": [
-          {
-            "internalType": "address",
-            "name": "recipient",
-            "type": "address"
-          },
-          {
-            "internalType": "uint256",
-            "name": "percentage",
-            "type": "uint256"
-          }
-        ],
-        "internalType": "struct Swag1155.RoyaltyInfo[]",
-        "name": "",
-        "type": "tuple[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "serial",
-        "type": "uint256"
-      }
-    ],
-    "name": "getSerialOwner",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
       }
     ],
     "stateMutability": "view",
@@ -1335,14 +1194,24 @@
       {
         "components": [
           {
-            "internalType": "uint256",
-            "name": "maxSupply",
-            "type": "uint256"
+            "internalType": "uint128",
+            "name": "onchainCap",
+            "type": "uint128"
           },
           {
-            "internalType": "uint256",
-            "name": "minted",
-            "type": "uint256"
+            "internalType": "uint128",
+            "name": "onchainMinted",
+            "type": "uint128"
+          },
+          {
+            "internalType": "uint128",
+            "name": "voucherCap",
+            "type": "uint128"
+          },
+          {
+            "internalType": "uint128",
+            "name": "voucherMinted",
+            "type": "uint128"
           },
           {
             "internalType": "bool",
@@ -1403,37 +1272,44 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "tokenId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "to",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "quantity",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "orderRef",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "deadline",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct Swag1155.ClaimVoucher",
+        "name": "voucher",
+        "type": "tuple"
       }
     ],
-    "name": "holderDiscounts",
+    "name": "hashVoucher",
     "outputs": [
       {
-        "internalType": "address",
-        "name": "token",
-        "type": "address"
-      },
-      {
-        "internalType": "enum Swag1155.DiscountType",
-        "name": "discountType",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint256",
-        "name": "value",
-        "type": "uint256"
-      },
-      {
-        "internalType": "bool",
-        "name": "active",
-        "type": "bool"
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
       }
     ],
     "stateMutability": "view",
@@ -1508,35 +1384,6 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "eventId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address",
-        "name": "buyer",
-        "type": "address"
-      }
-    ],
-    "name": "isPoapWhitelisted",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
         "internalType": "address",
         "name": "account",
         "type": "address"
@@ -1570,24 +1417,6 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address",
-        "name": "owner",
-        "type": "address"
-      }
-    ],
-    "name": "markFulfilled",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
         "name": "",
         "type": "uint256"
       }
@@ -1606,56 +1435,12 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
+        "internalType": "bytes32",
         "name": "",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
+        "type": "bytes32"
       }
     ],
-    "name": "poapDiscounts",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "eventId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "discountBps",
-        "type": "uint256"
-      },
-      {
-        "internalType": "bool",
-        "name": "active",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "poapWhitelist",
+    "name": "orderClaimed",
     "outputs": [
       {
         "internalType": "bool",
@@ -1667,37 +1452,20 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      }
-    ],
-    "name": "redeem",
+    "inputs": [],
+    "name": "pause",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "redemptions",
+    "inputs": [],
+    "name": "paused",
     "outputs": [
       {
-        "internalType": "enum Swag1155.RedemptionStatus",
+        "internalType": "bool",
         "name": "",
-        "type": "uint8"
+        "type": "bool"
       }
     ],
     "stateMutability": "view",
@@ -1711,7 +1479,26 @@
         "type": "uint256"
       }
     ],
-    "name": "remaining",
+    "name": "remainingOnchain",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "remainingVoucher",
     "outputs": [
       {
         "internalType": "uint256",
@@ -1743,24 +1530,6 @@
         "type": "uint256"
       },
       {
-        "internalType": "uint256",
-        "name": "index",
-        "type": "uint256"
-      }
-    ],
-    "name": "removeHolderDiscount",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
         "internalType": "address",
         "name": "token",
         "type": "address"
@@ -1774,40 +1543,12 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "index",
-        "type": "uint256"
+        "internalType": "address",
+        "name": "signer",
+        "type": "address"
       }
     ],
-    "name": "removePoapDiscount",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "eventId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address[]",
-        "name": "addresses",
-        "type": "address[]"
-      }
-    ],
-    "name": "removePoapWhitelist",
+    "name": "removeSigner",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1846,35 +1587,6 @@
     "name": "revokeRole",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "name": "royaltyRecipients",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "recipient",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "percentage",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -1941,30 +1653,6 @@
     "name": "safeTransferFrom",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "name": "serialOwner",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -2042,9 +1730,14 @@
         "type": "uint256"
       },
       {
-        "internalType": "uint256",
-        "name": "maxSupply",
-        "type": "uint256"
+        "internalType": "uint128",
+        "name": "onchainCap",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint128",
+        "name": "voucherCap",
+        "type": "uint128"
       },
       {
         "internalType": "bool",
@@ -2065,9 +1758,14 @@
         "type": "uint256"
       },
       {
-        "internalType": "uint256",
-        "name": "maxSupply",
-        "type": "uint256"
+        "internalType": "uint128",
+        "name": "onchainCap",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint128",
+        "name": "voucherCap",
+        "type": "uint128"
       },
       {
         "internalType": "bool",
@@ -2076,7 +1774,7 @@
       },
       {
         "internalType": "string",
-        "name": "tokenURI",
+        "name": "metadataURI",
         "type": "string"
       }
     ],
@@ -2108,11 +1806,11 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "",
+        "name": "tokenId",
         "type": "uint256"
       }
     ],
-    "name": "totalRoyaltyBps",
+    "name": "totalMinted",
     "outputs": [
       {
         "internalType": "uint256",
@@ -2134,6 +1832,13 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "unpause",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -2190,14 +1895,24 @@
     "name": "variants",
     "outputs": [
       {
-        "internalType": "uint256",
-        "name": "maxSupply",
-        "type": "uint256"
+        "internalType": "uint128",
+        "name": "onchainCap",
+        "type": "uint128"
       },
       {
-        "internalType": "uint256",
-        "name": "minted",
-        "type": "uint256"
+        "internalType": "uint128",
+        "name": "onchainMinted",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint128",
+        "name": "voucherCap",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint128",
+        "name": "voucherMinted",
+        "type": "uint128"
       },
       {
         "internalType": "bool",
@@ -2207,5 +1922,9 @@
     ],
     "stateMutability": "view",
     "type": "function"
+  },
+  {
+    "stateMutability": "payable",
+    "type": "receive"
   }
 ]

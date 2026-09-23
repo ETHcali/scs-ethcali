@@ -1,15 +1,28 @@
 import { readFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+/**
+ * Verify the contracts written by scripts/deploy-all.ts on the block explorer.
+ *
+ * Constructor arguments MUST match deploy-all.ts exactly:
+ *   ZKPassportNFT : [name, symbol, owner, domain, scope]
+ *   FaucetManager : [zkPassportNFT, admin]
+ *   Swag1155      : []   — the clone implementation takes no arguments
+ *   SwagFactory   : [admin, swag1155Implementation]
+ *
+ * Swag1155 collections are EIP-1167 clones of the implementation; explorers
+ * resolve them automatically once the implementation is verified.
+ */
+
 interface DeploymentResult {
   zkPassportNFT: string;
   faucetManager: string;
-  swag1155: string;
+  swag1155Implementation?: string;
   swagFactory?: string;
   hackathonStaking?: string;
   donationVault?: string;
@@ -53,90 +66,61 @@ async function main() {
   const deployment: DeploymentResult = JSON.parse(readFileSync(deploymentPath, "utf-8"));
 
   console.log(`\n📋 Contract Addresses (from deployment):`);
-  console.log(`   ZKPassportNFT:  ${deployment.zkPassportNFT}`);
-  console.log(`   FaucetManager:  ${deployment.faucetManager}`);
-  console.log(`   Swag1155:       ${deployment.swag1155}`);
-  if (deployment.swagFactory)     console.log(`   SwagFactory:    ${deployment.swagFactory}`);
+  console.log(`   ZKPassportNFT:   ${deployment.zkPassportNFT}`);
+  console.log(`   FaucetManager:   ${deployment.faucetManager}`);
+  if (deployment.swag1155Implementation) console.log(`   Swag1155 (impl): ${deployment.swag1155Implementation}`);
+  if (deployment.swagFactory)            console.log(`   SwagFactory:     ${deployment.swagFactory}`);
 
   console.log(`\n📋 Config (from deployment):`);
   console.log(`   Owner/Admin:    ${deployment.config.zkPassportAdmin}`);
+  console.log(`   Swag admin:     ${deployment.swagConfig?.swagAdmin ?? deployment.config.swagAdmin}`);
   console.log(`   Treasury:       ${deployment.config.swagTreasury}`);
-  console.log(`   USDC:           ${deployment.config.usdcAddress}`);
 
-  // Constructor arguments MUST match deploy-all.ts exactly:
-  // ZKPassportNFT: ["ZKPassport Verification", "ZKPASS", owner]
-  // FaucetManager: [nftAddress, admin]
-  // Swag1155: ["ipfs://", usdc, treasury, admin]
+  const verify = (label: string, address: string, args: string[]) => {
+    console.log(`\n📝 Verifying ${label} at ${address}...`);
+    console.log(`   Constructor args: ${JSON.stringify(args)}`);
+    try {
+      // argv array, no shell: addresses and args are passed verbatim, never interpolated.
+      execFileSync("npx", ["hardhat", "verify", "--network", networkName, address, ...args], {
+        stdio: "inherit",
+        cwd: join(__dirname, ".."),
+      });
+      console.log(`✅ ${label} verified`);
+    } catch {
+      console.log(`ℹ️  ${label} verification attempted (may already be verified or failed)`);
+    }
+  };
 
-  // Verify ZKPassportNFT
-  console.log(`\n📝 Verifying ZKPassportNFT at ${deployment.zkPassportNFT}...`);
-  const zkpArgs = [
-    "ZKPassport Verification",  // name - must match deploy script
-    "ZKPASS",                    // symbol - must match deploy script
+  // Domain and scope fall back to the same defaults deploy-all.ts uses.
+  verify("ZKPassportNFT", deployment.zkPassportNFT, [
+    "ZKPassport Verification",
+    "ZKPASS",
     deployment.config.zkPassportAdmin,
-  ];
-  console.log(`   Constructor args: ${JSON.stringify(zkpArgs)}`);
+    process.env.ZKPASSPORT_DOMAIN || "ethcali.com",
+    process.env.ZKPASSPORT_SCOPE || "ethcali-verification",
+  ]);
 
-  try {
-    execSync(
-      `npx hardhat verify --network ${networkName} ${deployment.zkPassportNFT} "${zkpArgs[0]}" "${zkpArgs[1]}" "${zkpArgs[2]}"`,
-      { stdio: "inherit", cwd: join(__dirname, "..") }
-    );
-    console.log(`✅ ZKPassportNFT verified`);
-  } catch (error: any) {
-    console.log(`ℹ️  ZKPassportNFT verification attempted (may already be verified or failed)`);
-  }
-
-  // Verify FaucetManager
-  console.log(`\n📝 Verifying FaucetManager at ${deployment.faucetManager}...`);
-  const faucetArgs = [
+  verify("FaucetManager", deployment.faucetManager, [
     deployment.zkPassportNFT,
     deployment.config.faucetAdmin,
-  ];
-  console.log(`   Constructor args: ${JSON.stringify(faucetArgs)}`);
+  ]);
 
-  try {
-    execSync(
-      `npx hardhat verify --network ${networkName} ${deployment.faucetManager} "${faucetArgs[0]}" "${faucetArgs[1]}"`,
-      { stdio: "inherit", cwd: join(__dirname, "..") }
-    );
-    console.log(`✅ FaucetManager verified`);
-  } catch (error: any) {
-    console.log(`ℹ️  FaucetManager verification attempted (may already be verified or failed)`);
+  if (deployment.swag1155Implementation) {
+    verify("Swag1155 implementation", deployment.swag1155Implementation, []);
+  } else {
+    console.log(`\n⚠️  No swag1155Implementation in ${deploymentPath} — this deployment predates the clone-only Swag1155. Re-run deploy-all.ts.`);
   }
 
-  // Verify Swag1155
-  console.log(`\n📝 Verifying Swag1155 at ${deployment.swag1155}...`);
-  const swagArgs = [
-    "ipfs://",                        // baseURI — must match deploy script
-    deployment.config.usdcAddress,
-    deployment.config.swagTreasury,
-    deployment.config.swagAdmin,
-  ];
-  console.log(`   Constructor args: ${JSON.stringify(swagArgs)}`);
-
-  try {
-    execSync(
-      `npx hardhat verify --network ${networkName} ${deployment.swag1155} "${swagArgs[0]}" "${swagArgs[1]}" "${swagArgs[2]}" "${swagArgs[3]}"`,
-      { stdio: "inherit", cwd: join(__dirname, "..") }
-    );
-    console.log(`✅ Swag1155 verified`);
-  } catch (error: any) {
-    console.log(`ℹ️  Swag1155 verification attempted (may already be verified or failed)`);
-  }
-
-  // Verify SwagFactory (direct deploy — constructor arg is swagAdmin)
   if (deployment.swagFactory) {
-    console.log(`\n📝 Verifying SwagFactory at ${deployment.swagFactory}...`);
-    console.log(`   Constructor arg: ${deployment.config.swagAdmin}`);
-    try {
-      execSync(
-        `npx hardhat verify --network ${networkName} ${deployment.swagFactory} "${deployment.config.swagAdmin}"`,
-        { stdio: "inherit", cwd: join(__dirname, "..") }
-      );
-      console.log(`✅ SwagFactory verified`);
-    } catch (error: any) {
-      console.log(`ℹ️  SwagFactory verification attempted (may already be verified or failed)`);
+    if (!deployment.swag1155Implementation) {
+      console.log(`⚠️  Skipping SwagFactory: its constructor takes (admin, implementation) and the implementation address is missing.`);
+    } else {
+      // deploy-swag.ts records its own admin under swagConfig; the top-level
+      // config block is from the last full deploy-all run and may be older.
+      verify("SwagFactory", deployment.swagFactory, [
+        deployment.swagConfig?.swagAdmin ?? deployment.config.swagAdmin,
+        deployment.swag1155Implementation,
+      ]);
     }
   }
 
@@ -148,14 +132,16 @@ async function main() {
     ethereum: "https://etherscan.io/address",
     unichain: "https://uniscan.xyz/address",
     optimism: "https://optimistic.etherscan.io/address",
+    celo: "https://celoscan.io/address",
   };
   const explorerUrl = explorerUrls[networkName] || "";
 
   if (explorerUrl) {
-    console.log(`   ZKPassportNFT:  ${explorerUrl}/${deployment.zkPassportNFT}`);
-    console.log(`   FaucetManager:  ${explorerUrl}/${deployment.faucetManager}`);
-    console.log(`   Swag1155:       ${explorerUrl}/${deployment.swag1155}`);
-    if (deployment.swagFactory)     console.log(`   SwagFactory:    ${explorerUrl}/${deployment.swagFactory}`);  }
+    console.log(`   ZKPassportNFT:   ${explorerUrl}/${deployment.zkPassportNFT}`);
+    console.log(`   FaucetManager:   ${explorerUrl}/${deployment.faucetManager}`);
+    if (deployment.swag1155Implementation) console.log(`   Swag1155 (impl): ${explorerUrl}/${deployment.swag1155Implementation}`);
+    if (deployment.swagFactory)            console.log(`   SwagFactory:     ${explorerUrl}/${deployment.swagFactory}`);
+  }
 }
 
 main().catch((error) => {

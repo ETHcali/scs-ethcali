@@ -24,6 +24,7 @@ describe("Swag1155", async function () {
   let swag: any;
   let factory: any;
   let chainId: number;
+  let publicClient: any;
 
   const BASE_URI = "https://app.ethcali.org/metadata/{id}.json";
 
@@ -43,6 +44,8 @@ describe("Swag1155", async function () {
           payments: [{ token: usdc.address, price: USDC(50) }],
         },
       ],
+      // The backend key is granted SIGNER_ROLE by the factory itself.
+      signer.account.address,
     ]);
     const all = await factory.read.getCollections();
     return viem.getContractAt("Swag1155", all[all.length - 1]);
@@ -84,7 +87,7 @@ describe("Swag1155", async function () {
   }
 
   before(async function () {
-    const publicClient = await viem.getPublicClient();
+    publicClient = await viem.getPublicClient();
     chainId = await publicClient.getChainId();
 
     usdc = await viem.deployContract("MockUSDC", []);
@@ -98,7 +101,6 @@ describe("Swag1155", async function () {
     ]);
 
     swag = await freshCollection(100n, 100n);
-    await swag.write.addSigner([signer.account.address]);
   });
 
   // ── Clone-only ─────────────────────────────────────────────────────────────
@@ -130,6 +132,48 @@ describe("Swag1155", async function () {
       c.write.setVariant([1n, 1n, 5n, true]),
       /CapBelowMinted/
     );
+  });
+
+  it("refuses a variant with no stock in either channel", async function () {
+    const c = await freshCollection(5n, 5n);
+    // Before: this was pushed into listTokenIds() yet reported VariantNotFound everywhere.
+    await assert.rejects(c.write.setVariant([7n, 0n, 0n, false]), /EmptyVariant/);
+    await assert.rejects(
+      c.write.setVariantWithURI([7n, 0n, 0n, true, "ipfs://ghost.json"]),
+      /EmptyVariant/
+    );
+    assert.deepEqual([...(await c.read.listTokenIds())], [1n]);
+
+    // An existing variant cannot be zeroed out either — deactivate it instead.
+    await assert.rejects(c.write.setVariant([1n, 0n, 0n, false]), /EmptyVariant/);
+    await c.write.setVariant([1n, 5n, 5n, false]);
+    assert.equal((await c.read.getVariant([1n])).active, false);
+  });
+
+  it("registers a tokenId once no matter how often it is reconfigured", async function () {
+    const c = await freshCollection(5n, 5n);
+
+    await c.write.setVariantWithURI([7n, 5n, 5n, true, "ipfs://seven.json"]);
+    await c.write.setVariantWithURI([7n, 5n, 5n, true, "ipfs://seven.json"]);
+    await c.write.setVariantWithURI([7n, 8n, 9n, false, "ipfs://seven-v2.json"]);
+    await c.write.setVariant([7n, 9n, 9n, true]);
+    // tokenId 1 came from the factory via setVariantWithURI; touching it again must not re-add it.
+    await c.write.setVariant([1n, 6n, 6n, true]);
+
+    const ids = [...(await c.read.listTokenIds())].sort((a: bigint, b: bigint) => Number(a - b));
+    assert.deepEqual(ids, [1n, 7n]);
+    assert.equal(await c.read.uri([7n]), "ipfs://seven-v2.json");
+  });
+
+  it("refuses a zero price — free merch goes through vouchers, not prices", async function () {
+    const c = await freshCollection(5n, 5n);
+    await assert.rejects(c.write.setPaymentOption([1n, usdc.address, 0n]), /ZeroPrice/);
+    await assert.rejects(c.write.setPaymentOption([1n, ETH_TOKEN, 0n]), /ZeroPrice/);
+    // The existing price survived the failed overwrite.
+    assert.equal(await c.read.getTokenPrice([1n, usdc.address]), USDC(50));
+    assert.deepEqual([...(await c.read.getPaymentTokens([1n]))].map((a: string) => a.toLowerCase()), [
+      usdc.address.toLowerCase(),
+    ]);
   });
 
   // ── Channel 1: buy() ───────────────────────────────────────────────────────
@@ -235,6 +279,63 @@ describe("Swag1155", async function () {
     assert.equal(await c.read.balanceOf([buyer.account.address, 1n]), 1n);
   });
 
+  it("a cancelled order can never be claimed, and canClaim says why", async function () {
+    const c = await freshCollection(10n, 10n);
+    const voucher = voucherFor({ orderRef: `0x${"ca".repeat(32)}` });
+    const sig = await signVoucher(voucher, signer, c);
+
+    const hash = await c.write.cancelOrder([voucher.orderRef]);
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    const logs = await publicClient.getContractEvents({
+      address: c.address,
+      abi: c.abi,
+      eventName: "OrderCancelled",
+      fromBlock: receipt.blockNumber,
+      toBlock: receipt.blockNumber,
+    });
+    assert.equal(logs.length, 1);
+    assert.equal(logs[0].args.orderRef, voucher.orderRef);
+    assert.equal(await c.read.orderClaimed([voucher.orderRef]), true);
+
+    const [allowed, reason] = await c.read.canClaim([voucher, sig]);
+    assert.equal(allowed, false);
+    assert.equal(reason, "Order already claimed or cancelled");
+
+    await assert.rejects(
+      c.write.claim([voucher, sig], { account: buyer.account }),
+      /VoucherAlreadyClaimed/
+    );
+    assert.equal(await c.read.balanceOf([buyer.account.address, 1n]), 0n);
+    assert.equal(await c.read.remainingVoucher([1n]), 10n);
+  });
+
+  it("cancelling an order that already minted is loud, not silent", async function () {
+    const c = await freshCollection(10n, 10n);
+    const voucher = voucherFor({ orderRef: `0x${"cb".repeat(32)}` });
+    await c.write.claim([voucher, await signVoucher(voucher, signer, c)]);
+
+    await assert.rejects(c.write.cancelOrder([voucher.orderRef]), /VoucherAlreadyClaimed/);
+    // Cancelling twice is refused the same way.
+    const fresh = `0x${"cc".repeat(32)}`;
+    await c.write.cancelOrder([fresh]);
+    await assert.rejects(c.write.cancelOrder([fresh]), /VoucherAlreadyClaimed/);
+  });
+
+  it("only an admin can cancel an order", async function () {
+    const c = await freshCollection(10n, 10n);
+    const orderRef = `0x${"cd".repeat(32)}`;
+    await assert.rejects(
+      c.write.cancelOrder([orderRef], { account: outsider.account }),
+      /AccessControlUnauthorizedAccount/
+    );
+    // The backend signer is not an admin either.
+    await assert.rejects(
+      c.write.cancelOrder([orderRef], { account: signer.account }),
+      /AccessControlUnauthorizedAccount/
+    );
+    assert.equal(await c.read.orderClaimed([orderRef]), false);
+  });
+
   it("rejects a voucher signed by someone without SIGNER_ROLE", async function () {
     const c = await freshCollection(10n, 10n);
     await c.write.addSigner([signer.account.address]);
@@ -330,24 +431,42 @@ describe("Swag1155", async function () {
 
   // ── Serials ────────────────────────────────────────────────────────────────
 
-  it("assigns a serial per unit across both channels", async function () {
+  it("assigns a serial per unit across both channels, one event per mint", async function () {
     const c = await freshCollection(2n, 2n);
-    await c.write.addSigner([signer.account.address]);
     await usdc.write.approve([c.address, USDC(1000)], { account: buyer.account });
 
-    await c.write.buy([1n, 2n, usdc.address], { account: buyer.account });
+    const buyHash = await c.write.buy([1n, 2n, usdc.address], { account: buyer.account });
     const v = voucherFor({ to: buyer2.account.address, orderRef: `0x${"0c".repeat(32)}` });
-    await c.write.claim([v, await signVoucher(v, signer, c)]);
+    const claimHash = await c.write.claim([v, await signVoucher(v, signer, c)]);
 
     assert.equal(await c.read.nextSerial([1n]), 3n);
-    assert.equal(
-      (await c.read.getSerialOwner([1n, 0n])).toLowerCase(),
-      buyer.account.address.toLowerCase()
-    );
-    assert.equal(
-      (await c.read.getSerialOwner([1n, 2n])).toLowerCase(),
-      buyer2.account.address.toLowerCase()
-    );
+    assert.equal(await c.read.nextSerial([1n]), await c.read.totalMinted([1n]));
+
+    // Serials live in the log, not in storage: a 2-unit buy is one event with a range.
+    const from = (await publicClient.getTransactionReceipt({ hash: buyHash })).blockNumber;
+    const to = (await publicClient.getTransactionReceipt({ hash: claimHash })).blockNumber;
+    const logs = await publicClient.getContractEvents({
+      address: c.address,
+      abi: c.abi,
+      eventName: "SerialsAssigned",
+      fromBlock: from,
+      toBlock: to,
+    });
+    assert.equal(logs.length, 2);
+
+    assert.equal(logs[0].args.tokenId, 1n);
+    assert.equal(logs[0].args.to.toLowerCase(), buyer.account.address.toLowerCase());
+    assert.equal(logs[0].args.firstSerial, 0n);
+    assert.equal(logs[0].args.quantity, 2n);
+
+    assert.equal(logs[1].args.tokenId, 1n);
+    assert.equal(logs[1].args.to.toLowerCase(), buyer2.account.address.toLowerCase());
+    assert.equal(logs[1].args.firstSerial, 2n);
+    assert.equal(logs[1].args.quantity, 1n);
+
+    // The ranges tile the serial space exactly.
+    const issued = logs.reduce((n: bigint, l: any) => n + l.args.quantity, 0n);
+    assert.equal(issued, await c.read.nextSerial([1n]));
   });
 
   // ── canBuy / canClaim mirror the writes ────────────────────────────────────
@@ -376,6 +495,24 @@ describe("Swag1155", async function () {
     assert.equal(reason, "Sales are paused");
   });
 
+  it("canBuy refuses a total that would overflow instead of panicking", async function () {
+    const c = await freshCollection(10n, 10n);
+    // A price this high is an admin mistake, but the view must still answer.
+    await c.write.setPaymentOption([1n, usdc.address, 2n ** 255n]);
+
+    let [allowed, reason] = await c.read.canBuy([1n, 1n, usdc.address]);
+    assert.equal(allowed, true, "one unit at 2^255 still fits in uint256");
+
+    [allowed, reason] = await c.read.canBuy([1n, 2n, usdc.address]);
+    assert.equal(allowed, false);
+    assert.equal(reason, "Quantity too large");
+
+    // And the write agrees — it reverts (checked arithmetic) rather than minting.
+    await usdc.write.approve([c.address, USDC(1000)], { account: buyer.account });
+    await assert.rejects(c.write.buy([1n, 2n, usdc.address], { account: buyer.account }));
+    assert.equal(await c.read.balanceOf([buyer.account.address, 1n]), 0n);
+  });
+
   it("canClaim rejects an already-claimed order", async function () {
     const c = await freshCollection(5n, 5n);
     await c.write.addSigner([signer.account.address]);
@@ -386,7 +523,7 @@ describe("Swag1155", async function () {
     await c.write.claim([voucher, sig]);
     const [allowed, reason] = await c.read.canClaim([voucher, sig]);
     assert.equal(allowed, false);
-    assert.equal(reason, "Order already claimed");
+    assert.equal(reason, "Order already claimed or cancelled");
   });
 
   // ── Accounting invariant ───────────────────────────────────────────────────

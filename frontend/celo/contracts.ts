@@ -1,5 +1,5 @@
 // Auto-generated contract addresses and types for Celo Mainnet
-// Generated: 2026-08-15T18:01:21.732Z
+// Generated: 2026-09-23T04:00:18.604Z
 export const CONTRACTS = {
   "network": "celo",
   "chainId": 42220,
@@ -2599,7 +2599,7 @@ export const CONTRACTS = {
       ]
     },
     "DonationVault": {
-      "address": "0x76235436cbD3F2ff12CC3610f2643654211Efb3d",
+      "address": "0x223f70933a14E847D83ff1e906C8CCf6962d36d3",
       "abi": [
         {
           "inputs": [
@@ -4387,7 +4387,7 @@ export const CONTRACTS = {
       ]
     },
     "DonationReceipt1155": {
-      "address": "0x25B43cE10ffD04Cb90123D7582E6B5100B27f9cB",
+      "address": "0xA4E67a7bc9e17D6eBBCaa369727b9e8949D278e0",
       "abi": [
         {
           "inputs": [
@@ -5487,8 +5487,8 @@ export const CONTRACTS = {
 } as const;
 
 export const ADDRESSES = {
-  DonationVault: "0x76235436cbD3F2ff12CC3610f2643654211Efb3d",
-  DonationReceipt1155: "0x25B43cE10ffD04Cb90123D7582E6B5100B27f9cB",
+  DonationVault: "0x223f70933a14E847D83ff1e906C8CCf6962d36d3",
+  DonationReceipt1155: "0xA4E67a7bc9e17D6eBBCaa369727b9e8949D278e0",
 } as const;
 
 export const CHAIN_ID = 42220 as const;

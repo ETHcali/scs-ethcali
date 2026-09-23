@@ -13,7 +13,8 @@ import "./Swag1155.sol";
  * deployCollection flow:
  *   1. Factory deploys Swag1155 with itself as initialAdmin.
  *   2. Factory calls setVariantWithURI for each size (tokenId = index + 1).
- *   3. Factory grants itemAdmin DEFAULT_ADMIN_ROLE + ADMIN_ROLE on the Swag1155.
+ *   3. Factory grants itemAdmin DEFAULT_ADMIN_ROLE + ADMIN_ROLE on the Swag1155,
+ *      and SIGNER_ROLE to `signer` when one is given.
  *   4. Factory renounces its own roles on the Swag1155 — itemAdmin has sole control.
  *   5. Factory registers the collection in its own registry and emits CollectionDeployed.
  */
@@ -79,7 +80,8 @@ contract SwagFactory is AccessControl {
         string  sku,
         address treasury,
         uint256 variantCount,
-        address indexed creator
+        address indexed creator,
+        address signer
     );
 
     event CollectionStatusChanged(address indexed collection, bool active);
@@ -122,6 +124,10 @@ contract SwagFactory is AccessControl {
      * @param itemAdmin Address that will own and manage the deployed Swag1155.
      * @param sizes     Array of VariantInit structs.  tokenId = array index + 1.
      *                  Each size includes its own PaymentOption[] (token + price per token).
+     *                  A size with both caps zero reverts Swag1155.EmptyVariant.
+     * @param signer    Backend key granted SIGNER_ROLE so Shopify vouchers can be
+     *                  claimed from block one. Zero address grants none; the
+     *                  itemAdmin can call addSigner later.
      * @return swagAddr Address of the newly deployed Swag1155.
      */
     function deployCollection(
@@ -129,7 +135,8 @@ contract SwagFactory is AccessControl {
         string        calldata sku,
         address                treasury,
         address                itemAdmin,
-        VariantInit[] calldata sizes
+        VariantInit[] calldata sizes,
+        address                signer
     ) external onlyRole(ADMIN_ROLE) returns (address swagAddr) {
         if (bytes(name).length == 0) revert EmptyName();
         if (bytes(sku).length  == 0) revert EmptySku();
@@ -172,8 +179,11 @@ contract SwagFactory is AccessControl {
         }
 
         // 3. Grant itemAdmin full control: DEFAULT_ADMIN_ROLE + ADMIN_ROLE.
+        //    Grant the voucher signer now, while the factory still holds
+        //    DEFAULT_ADMIN_ROLE — after step 4 only the itemAdmin could.
         swag.grantRole(swag.DEFAULT_ADMIN_ROLE(), itemAdmin);
         swag.addAdmin(itemAdmin);
+        if (signer != address(0)) swag.addSigner(signer);
 
         // 4. Factory renounces its own roles — itemAdmin is now sole controller.
         swag.renounceRole(swag.ADMIN_ROLE(),         address(this));
@@ -193,7 +203,7 @@ contract SwagFactory is AccessControl {
             active:       true
         });
 
-        emit CollectionDeployed(swagAddr, name, sku, treasury, sizes.length, msg.sender);
+        emit CollectionDeployed(swagAddr, name, sku, treasury, sizes.length, msg.sender, signer);
     }
 
     // ── Collection management ─────────────────────────────────────────────────

@@ -1,0 +1,874 @@
+{
+  "_comment": [
+    "ETH Cali swag catalogue — the single seed for the chain (scs-ethcali/scripts/seed-swag.ts),",
+    "Supabase (swag_products / swag_variants) and Shopify (wallet_ethcali/scripts/shopify-sync.mjs).",
+    "Once seeded, Supabase is the live source of truth; this file is the bootstrap and the review diff.",
+    "",
+    "One product = one Swag1155 collection per chain. Each variant = one design = one tokenId,",
+    "in array order (tokenId = index + 1). Append new designs at the end; never reorder or delete.",
+    "Size is NOT on chain: it is a Shopify variant option captured on the order.",
+    "",
+    "Prices are human-readable USD, parsed with USDC's 6 decimals by the seeder. COP follows the",
+    "live TRM rate (app) or a daily push (Shopify). USDC is the only on-chain token at launch.",
+    "Stock decided 2026-09-23: 5 per design, 1 sold on chain via buy(), 4 via Shopify vouchers.",
+    "Caps can be raised later, never lowered below what has been minted.",
+    "",
+    "imageCid / metadataCid are filled by wallet_ethcali/scripts/swag-pin.mjs. The seeder refuses",
+    "to run while any metadataURI is still ipfs://PENDING."
+  ],
+  "chain": "base",
+  "products": [
+    {
+      "name": "ETH Cali Swag 2026",
+      "sku": "ETHCALI-SWAG-2026",
+      "description": "Official ETH Cali merch. Free at our events; sold the rest of the time.",
+      "variants": [
+        {
+          "label": "Privacy is Freedom cap — Octahedron",
+          "designSku": "ETHCALI-CAP-PRIVACY-OCTA-2026",
+          "category": "Cap",
+          "name": {
+            "es": "Gorra Privacy is Freedom — Octaedro",
+            "en": "Privacy is Freedom cap — Octahedron"
+          },
+          "description": {
+            "es": "La colección Valle del Cauca. La gorra con el octaedro al frente. Edición limitada.",
+            "en": "The Valle del Cauca collection. The cap with the octahedron on the front. Limited edition."
+          },
+          "image": "cap-privacy-is-freedom.png",
+          "imageCid": "bafybeiavmd2t74eakndqiymiqtdac3rutldmwp2skkjwn3iqapxkiwurza",
+          "metadataCid": "bafkreidxqwtxnzbirhscjtchdehpud27wjc5cq6azhf2n6qxd3bq4447e4",
+          "metadataURI": "ipfs://bafkreidxqwtxnzbirhscjtchdehpud27wjc5cq6azhf2n6qxd3bq4447e4",
+          "sized": false,
+          "sizes": [],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "25"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554657022138",
+            "handle": "ethcali-cap-privacy-octa-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-CAP-PRIVACY-OCTA-2026",
+                "size": null,
+                "variantId": "gid://shopify/ProductVariant/46749005971642",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909378912442",
+                "priceCop": 80000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:03.528Z"
+          }
+        },
+        {
+          "label": "Privacy is Freedom cap — Phrase",
+          "designSku": "ETHCALI-CAP-PRIVACY-PHRASE-2026",
+          "category": "Cap",
+          "name": {
+            "es": "Gorra Privacy is Freedom — Frase",
+            "en": "Privacy is Freedom cap — Phrase"
+          },
+          "description": {
+            "es": "La colección Valle del Cauca. La gorra con la frase al frente. Edición limitada.",
+            "en": "The Valle del Cauca collection. The cap with the line on the front. Limited edition."
+          },
+          "image": "cap-privacy-is-freedom.png",
+          "imageCid": "bafybeiavmd2t74eakndqiymiqtdac3rutldmwp2skkjwn3iqapxkiwurza",
+          "metadataCid": "bafkreicz7cy2rh67pvax6vrdvuqvwl6iiepc62tg7r3zaoq2fmfolqo7fi",
+          "metadataURI": "ipfs://bafkreicz7cy2rh67pvax6vrdvuqvwl6iiepc62tg7r3zaoq2fmfolqo7fi",
+          "sized": false,
+          "sizes": [],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "25"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554657120442",
+            "handle": "ethcali-cap-privacy-phrase-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-CAP-PRIVACY-PHRASE-2026",
+                "size": null,
+                "variantId": "gid://shopify/ProductVariant/46749006037178",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909378977978",
+                "priceCop": 80000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:04.342Z"
+          }
+        },
+        {
+          "label": "Ethereum cap",
+          "designSku": "ETHCALI-CAP-ETHEREUM-2026",
+          "category": "Cap",
+          "name": {
+            "es": "Gorra Ethereum",
+            "en": "Ethereum cap"
+          },
+          "description": {
+            "es": "El octaedro bordado. La que más se pide.",
+            "en": "The embroidered octahedron. The one most asked for."
+          },
+          "image": "cap-ethereum.png",
+          "imageCid": "bafybeids3gnfoxa53tjxc2fnw3ki5ftijblzg23aeu5lv67uxib6t5wbim",
+          "metadataCid": "bafkreihithowmxwr5qfwqsathx2puxwq2e7tkpvwrwccggt3z7ol5dpgua",
+          "metadataURI": "ipfs://bafkreihithowmxwr5qfwqsathx2puxwq2e7tkpvwrwccggt3z7ol5dpgua",
+          "sized": false,
+          "sizes": [],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "25"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554657185978",
+            "handle": "ethcali-cap-ethereum-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-CAP-ETHEREUM-2026",
+                "size": null,
+                "variantId": "gid://shopify/ProductVariant/46749006135482",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379076282",
+                "priceCop": 80000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:05.088Z"
+          }
+        },
+        {
+          "label": "OP Mainnet cap",
+          "designSku": "ETHCALI-CAP-OPTIMISM-2026",
+          "category": "Cap",
+          "name": {
+            "es": "Gorra OP Mainnet",
+            "en": "OP Mainnet cap"
+          },
+          "description": {
+            "es": "Con los colores de Optimism.",
+            "en": "In Optimism's colours."
+          },
+          "image": "cap-optimism.png",
+          "imageCid": "bafybeid7xsrmlvgxireudbe6uqtm7p3zwf4pnrkc4o6ifkwehuj6cbszdm",
+          "metadataCid": "bafkreieuzyojlp7mywryr7qvedzbrglzjpylxyb3z5aal3ahkh3zyoafa4",
+          "metadataURI": "ipfs://bafkreieuzyojlp7mywryr7qvedzbrglzjpylxyb3z5aal3ahkh3zyoafa4",
+          "sized": false,
+          "sizes": [],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "25"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554657251514",
+            "handle": "ethcali-cap-optimism-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-CAP-OPTIMISM-2026",
+                "size": null,
+                "variantId": "gid://shopify/ProductVariant/46749006201018",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379141818",
+                "priceCop": 80000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:05.868Z"
+          }
+        },
+        {
+          "label": "Uniswap cap",
+          "designSku": "ETHCALI-CAP-UNISWAP-2026",
+          "category": "Cap",
+          "name": {
+            "es": "Gorra Uniswap",
+            "en": "Uniswap cap"
+          },
+          "description": {
+            "es": "Para quienes viven en DeFi.",
+            "en": "For the people who live in DeFi."
+          },
+          "image": "cap-uniswap.png",
+          "imageCid": "bafybeiclteopniusr3eaxl4rmcjxhxngmhw6tj6gwnghjefee6biphsaqa",
+          "metadataCid": "bafkreidtcja55kmhkopkflcda4sefztesgb24ax5p6fejvng3i7pbuyeli",
+          "metadataURI": "ipfs://bafkreidtcja55kmhkopkflcda4sefztesgb24ax5p6fejvng3i7pbuyeli",
+          "sized": false,
+          "sizes": [],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "25"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554657317050",
+            "handle": "ethcali-cap-uniswap-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-CAP-UNISWAP-2026",
+                "size": null,
+                "variantId": "gid://shopify/ProductVariant/46749006266554",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379207354",
+                "priceCop": 80000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:06.628Z"
+          }
+        },
+        {
+          "label": "Pepe cap",
+          "designSku": "ETHCALI-CAP-PEPE-2026",
+          "category": "Cap",
+          "name": {
+            "es": "Gorra Pepe",
+            "en": "Pepe cap"
+          },
+          "description": {
+            "es": "Porque sí.",
+            "en": "Because why not."
+          },
+          "image": "cap-pepe.png",
+          "imageCid": "bafybeihvyzh4m7ywj7pwc273cpqhiuhzyac6nmni4l5lhrs7qeyjdhn6pq",
+          "metadataCid": "bafkreigro6ssel2ezw6phvue72267jjfcx5ppw4q2q7xggpfkwm2gcvmfi",
+          "metadataURI": "ipfs://bafkreigro6ssel2ezw6phvue72267jjfcx5ppw4q2q7xggpfkwm2gcvmfi",
+          "sized": false,
+          "sizes": [],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "25"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554657415354",
+            "handle": "ethcali-cap-pepe-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-CAP-PEPE-2026",
+                "size": null,
+                "variantId": "gid://shopify/ProductVariant/46749006364858",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379305658",
+                "priceCop": 80000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:07.477Z"
+          }
+        },
+        {
+          "label": "Ethereans mug",
+          "designSku": "ETHCALI-MUG-ETHEREANS-2026",
+          "category": "Mug",
+          "name": {
+            "es": "Mug Ethereans",
+            "en": "Ethereans mug"
+          },
+          "description": {
+            "es": "La escena del génesis de Ethereum, dibujada a mano y en acuarela.",
+            "en": "Ethereum's genesis scene, hand-drawn in watercolour."
+          },
+          "image": "mug-ethereans.png",
+          "imageCid": "bafybeifwptryygjtn6gsoe5flrr74d562kujc5hj6zpirhrx3tpe3onoje",
+          "metadataCid": "bafkreigwmgtfls3g7q24r5kg2lwzxiuupzx5e44hix5zcspp4zq6djjvc4",
+          "metadataURI": "ipfs://bafkreigwmgtfls3g7q24r5kg2lwzxiuupzx5e44hix5zcspp4zq6djjvc4",
+          "sized": false,
+          "sizes": [],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "15"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554657480890",
+            "handle": "ethcali-mug-ethereans-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-MUG-ETHEREANS-2026",
+                "size": null,
+                "variantId": "gid://shopify/ProductVariant/46749006430394",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379371194",
+                "priceCop": 48000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:08.232Z"
+          }
+        },
+        {
+          "label": "Ethereum mug",
+          "designSku": "ETHCALI-MUG-ETHEREUM-2026",
+          "category": "Mug",
+          "name": {
+            "es": "Mug Ethereum",
+            "en": "Ethereum mug"
+          },
+          "description": {
+            "es": "El octaedro, sin más.",
+            "en": "The octahedron, nothing else."
+          },
+          "image": "mug-ethereum.png",
+          "imageCid": "bafybeigi3lm677z33ikgu4idap26vlaxj65jkahrgawoiy5kckmdrtfo6m",
+          "metadataCid": "bafkreidiuz4quo546rm5wktyt4uzjicm6ep56vcagwbv2qnp2en4ppfsb4",
+          "metadataURI": "ipfs://bafkreidiuz4quo546rm5wktyt4uzjicm6ep56vcagwbv2qnp2en4ppfsb4",
+          "sized": false,
+          "sizes": [],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "15"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554657546426",
+            "handle": "ethcali-mug-ethereum-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-MUG-ETHEREUM-2026",
+                "size": null,
+                "variantId": "gid://shopify/ProductVariant/46749006495930",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379436730",
+                "priceCop": 48000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:09.041Z"
+          }
+        },
+        {
+          "label": "ETHGlobal mug",
+          "designSku": "ETHCALI-MUG-ETHGLOBAL-2026",
+          "category": "Mug",
+          "name": {
+            "es": "Mug ETHGlobal",
+            "en": "ETHGlobal mug"
+          },
+          "description": {
+            "es": "De los hackathons de ETHGlobal, con quienes organizamos.",
+            "en": "From the ETHGlobal hackathons, one of the organisations we run things with."
+          },
+          "image": "mug-ethglobal.png",
+          "imageCid": "bafybeigi4bora467bz3skkbrg5r6u2xvarwnkdi3m6644t5abplvqi5zvi",
+          "metadataCid": "bafkreidzbq6xbhctwv44agcpahy7mc365jphr23l623xn4h4i53cqeg2ya",
+          "metadataURI": "ipfs://bafkreidzbq6xbhctwv44agcpahy7mc365jphr23l623xn4h4i53cqeg2ya",
+          "sized": false,
+          "sizes": [],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "15"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554657611962",
+            "handle": "ethcali-mug-ethglobal-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-MUG-ETHGLOBAL-2026",
+                "size": null,
+                "variantId": "gid://shopify/ProductVariant/46749006561466",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379502266",
+                "priceCop": 48000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:09.845Z"
+          }
+        },
+        {
+          "label": "Cyber Doge mug",
+          "designSku": "ETHCALI-MUG-CYBERDOGE-2026",
+          "category": "Mug",
+          "name": {
+            "es": "Mug Cyber Doge",
+            "en": "Cyber Doge mug"
+          },
+          "description": {
+            "es": "El meme que sobrevivió a todos los ciclos.",
+            "en": "The meme that outlived every cycle."
+          },
+          "image": "mug-cyber-doge.png",
+          "imageCid": "bafybeif5d32tqgrwvibvvt64rllat6w5t33jsuxxpnspnfwiygtzp5wvgm",
+          "metadataCid": "bafkreietbhmzjlaqqktow2s2b7yvxdoht34wgwnz46sw23bayl53le25te",
+          "metadataURI": "ipfs://bafkreietbhmzjlaqqktow2s2b7yvxdoht34wgwnz46sw23bayl53le25te",
+          "sized": false,
+          "sizes": [],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "15"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554657677498",
+            "handle": "ethcali-mug-cyberdoge-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-MUG-CYBERDOGE-2026",
+                "size": null,
+                "variantId": "gid://shopify/ProductVariant/46749006627002",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379567802",
+                "priceCop": 48000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:10.610Z"
+          }
+        },
+        {
+          "label": "Colombian Collaborative hoodie",
+          "designSku": "ETHCALI-HOODIE-CREAM-2026",
+          "category": "Hoodie",
+          "name": {
+            "es": "Hoodie Colombian Collaborative",
+            "en": "Colombian Collaborative hoodie"
+          },
+          "description": {
+            "es": "Crudo, con el lockup al pecho y las manos sosteniendo el octaedro a la espalda. Hecho con artesanos del Valle.",
+            "en": "Undyed, the lockup on the chest and hands holding the octahedron on the back. Made with artisans from the Valle."
+          },
+          "image": "hoodie-cream.png",
+          "imageCid": "bafybeiba7ya65onyahf3exmo36s7ec7g76lkynkqnq3eklnnh6i46db6mu",
+          "metadataCid": "bafkreigvmonk7yjruixfrfm2xoomm3ozjr5mc3njw6ve5x4rth5ujefpqy",
+          "metadataURI": "ipfs://bafkreigvmonk7yjruixfrfm2xoomm3ozjr5mc3njw6ve5x4rth5ujefpqy",
+          "sized": true,
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL"
+          ],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "45"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554657775802",
+            "handle": "ethcali-hoodie-cream-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-HOODIE-CREAM-2026-S",
+                "size": "S",
+                "variantId": "gid://shopify/ProductVariant/46749006725306",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379666106",
+                "priceCop": 144000
+              },
+              {
+                "sku": "ETHCALI-HOODIE-CREAM-2026-M",
+                "size": "M",
+                "variantId": "gid://shopify/ProductVariant/46749006758074",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379698874",
+                "priceCop": 144000
+              },
+              {
+                "sku": "ETHCALI-HOODIE-CREAM-2026-L",
+                "size": "L",
+                "variantId": "gid://shopify/ProductVariant/46749006790842",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379731642",
+                "priceCop": 144000
+              },
+              {
+                "sku": "ETHCALI-HOODIE-CREAM-2026-XL",
+                "size": "XL",
+                "variantId": "gid://shopify/ProductVariant/46749006823610",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379764410",
+                "priceCop": 144000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:11.423Z"
+          }
+        },
+        {
+          "label": "Black hoodie",
+          "designSku": "ETHCALI-HOODIE-BLACK-2026",
+          "category": "Hoodie",
+          "name": {
+            "es": "Hoodie negro",
+            "en": "Black hoodie"
+          },
+          "description": {
+            "es": "La versión oscura, con los detalles en ultramarino.",
+            "en": "The dark version, details picked out in ultramarine."
+          },
+          "image": "hoodie-black.png",
+          "imageCid": "bafybeie7wcd2xhpjamwev5h66jd5er2trtw74o63mu7bvbnp5c5i4bo5pi",
+          "metadataCid": "bafkreihvhsgp5qrohikgcvx3zqpo55qwbsjdjytq7qahxidogzrdtlmn5u",
+          "metadataURI": "ipfs://bafkreihvhsgp5qrohikgcvx3zqpo55qwbsjdjytq7qahxidogzrdtlmn5u",
+          "sized": true,
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL"
+          ],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "45"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554657841338",
+            "handle": "ethcali-hoodie-black-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-HOODIE-BLACK-2026-S",
+                "size": "S",
+                "variantId": "gid://shopify/ProductVariant/46749006889146",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379829946",
+                "priceCop": 144000
+              },
+              {
+                "sku": "ETHCALI-HOODIE-BLACK-2026-M",
+                "size": "M",
+                "variantId": "gid://shopify/ProductVariant/46749006921914",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379862714",
+                "priceCop": 144000
+              },
+              {
+                "sku": "ETHCALI-HOODIE-BLACK-2026-L",
+                "size": "L",
+                "variantId": "gid://shopify/ProductVariant/46749006954682",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379895482",
+                "priceCop": 144000
+              },
+              {
+                "sku": "ETHCALI-HOODIE-BLACK-2026-XL",
+                "size": "XL",
+                "variantId": "gid://shopify/ProductVariant/46749006987450",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379928250",
+                "priceCop": 144000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:12.355Z"
+          }
+        },
+        {
+          "label": "Community Edition hoodie",
+          "designSku": "ETHCALI-HOODIE-COMMUNITY-2026",
+          "category": "Hoodie",
+          "name": {
+            "es": "Hoodie Community Edition",
+            "en": "Community Edition hoodie"
+          },
+          "description": {
+            "es": "Edición especial que celebra a la comunidad.",
+            "en": "A special edition celebrating the community."
+          },
+          "image": "hoodie-community.jpg",
+          "imageCid": "bafybeia5zzo2a7z2xaw72srl3zyoihlyowqtuu4bnfomi365frgrm7smpq",
+          "metadataCid": "bafkreic5yfhzjemmpdufb5pq5sfw3jdkazycoz6sucphktiqzxae5lx6b4",
+          "metadataURI": "ipfs://bafkreic5yfhzjemmpdufb5pq5sfw3jdkazycoz6sucphktiqzxae5lx6b4",
+          "sized": true,
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL"
+          ],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "45"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554657906874",
+            "handle": "ethcali-hoodie-community-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-HOODIE-COMMUNITY-2026-S",
+                "size": "S",
+                "variantId": "gid://shopify/ProductVariant/46749007052986",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909379993786",
+                "priceCop": 144000
+              },
+              {
+                "sku": "ETHCALI-HOODIE-COMMUNITY-2026-M",
+                "size": "M",
+                "variantId": "gid://shopify/ProductVariant/46749007085754",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909380026554",
+                "priceCop": 144000
+              },
+              {
+                "sku": "ETHCALI-HOODIE-COMMUNITY-2026-L",
+                "size": "L",
+                "variantId": "gid://shopify/ProductVariant/46749007118522",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909380059322",
+                "priceCop": 144000
+              },
+              {
+                "sku": "ETHCALI-HOODIE-COMMUNITY-2026-XL",
+                "size": "XL",
+                "variantId": "gid://shopify/ProductVariant/46749007151290",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909380092090",
+                "priceCop": 144000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:13.193Z"
+          }
+        },
+        {
+          "label": "Uniswap × Cali t-shirt",
+          "designSku": "ETHCALI-TEE-UNISWAP-CALI-2026",
+          "category": "T-shirt",
+          "name": {
+            "es": "Camiseta Uniswap × Cali",
+            "en": "Uniswap × Cali t-shirt"
+          },
+          "description": {
+            "es": "El unicornio al pecho y Cali a la espalda: el Gato del Río, Cristo Rey, las iglesias y el río, en una línea rosada.",
+            "en": "The unicorn on the chest and Cali on the back: the Gato del Río, Cristo Rey, the churches and the river, in one pink line."
+          },
+          "image": "tshirt-uniswap-cali.png",
+          "imageCid": "bafybeiag222brmwsvb7wawtsvx5w6wqnuy62fnv7hz27pxy4v4hbgqsgvy",
+          "metadataCid": "bafkreibdus6xd5hyawrtqwatikp6754kh3xz6ako7dy4kka3hhmh7hw65u",
+          "metadataURI": "ipfs://bafkreibdus6xd5hyawrtqwatikp6754kh3xz6ako7dy4kka3hhmh7hw65u",
+          "sized": true,
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL"
+          ],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "25"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554658005178",
+            "handle": "ethcali-tee-uniswap-cali-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-TEE-UNISWAP-CALI-2026-S",
+                "size": "S",
+                "variantId": "gid://shopify/ProductVariant/46749007216826",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909380157626",
+                "priceCop": 80000
+              },
+              {
+                "sku": "ETHCALI-TEE-UNISWAP-CALI-2026-M",
+                "size": "M",
+                "variantId": "gid://shopify/ProductVariant/46749007249594",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909380190394",
+                "priceCop": 80000
+              },
+              {
+                "sku": "ETHCALI-TEE-UNISWAP-CALI-2026-L",
+                "size": "L",
+                "variantId": "gid://shopify/ProductVariant/46749007282362",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909380223162",
+                "priceCop": 80000
+              },
+              {
+                "sku": "ETHCALI-TEE-UNISWAP-CALI-2026-XL",
+                "size": "XL",
+                "variantId": "gid://shopify/ProductVariant/46749007315130",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909380255930",
+                "priceCop": 80000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:14.033Z"
+          }
+        },
+        {
+          "label": "Impact t-shirt",
+          "designSku": "ETHCALI-TEE-IMPACT-2026",
+          "category": "T-shirt",
+          "name": {
+            "es": "Camiseta Impacto",
+            "en": "Impact t-shirt"
+          },
+          "description": {
+            "es": "El octaedro al pecho y las manos sosteniéndolo a la espalda — la misma ilustración del hoodie crudo.",
+            "en": "The octahedron on the chest and the hands holding it on the back — the same illustration as the undyed hoodie."
+          },
+          "image": "tshirt-impact.png",
+          "imageCid": "bafybeihwtvty3grqpvrf5n225ei5zrp2ghli5mwn6onmdmii4gr7m5e3xa",
+          "metadataCid": "bafkreiciq5xizcmp4fifhwf53pwlfta5ytyqsy7wgxrcns4qamc6gtzyaq",
+          "metadataURI": "ipfs://bafkreiciq5xizcmp4fifhwf53pwlfta5ytyqsy7wgxrcns4qamc6gtzyaq",
+          "sized": true,
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL"
+          ],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "25"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554658070714",
+            "handle": "ethcali-tee-impact-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-TEE-IMPACT-2026-S",
+                "size": "S",
+                "variantId": "gid://shopify/ProductVariant/46749007413434",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909380354234",
+                "priceCop": 80000
+              },
+              {
+                "sku": "ETHCALI-TEE-IMPACT-2026-M",
+                "size": "M",
+                "variantId": "gid://shopify/ProductVariant/46749007446202",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909380387002",
+                "priceCop": 80000
+              },
+              {
+                "sku": "ETHCALI-TEE-IMPACT-2026-L",
+                "size": "L",
+                "variantId": "gid://shopify/ProductVariant/46749007478970",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909380419770",
+                "priceCop": 80000
+              },
+              {
+                "sku": "ETHCALI-TEE-IMPACT-2026-XL",
+                "size": "XL",
+                "variantId": "gid://shopify/ProductVariant/46749007511738",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909380452538",
+                "priceCop": 80000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:14.827Z"
+          }
+        },
+        {
+          "label": "Robot t-shirt",
+          "designSku": "ETHCALI-TEE-ROBOT-2026",
+          "category": "T-shirt",
+          "name": {
+            "es": "Camiseta Robot",
+            "en": "Robot t-shirt"
+          },
+          "description": {
+            "es": "Un robot armado con bloques, a la espalda. Para el track de smart devices y hardware abierto.",
+            "en": "A robot built out of blocks, on the back. For the smart devices and open hardware track."
+          },
+          "image": "tshirt-robot.png",
+          "imageCid": "bafybeifwm56lrcmwdmc5dsu3xgzvg754hvu3ut2wcak6wqdybyper7dvw4",
+          "metadataCid": "bafkreibj4ezy3q72zrib76b7j22xitaqwpsz7xgvhwh5ryz4azefxv4shq",
+          "metadataURI": "ipfs://bafkreibj4ezy3q72zrib76b7j22xitaqwpsz7xgvhwh5ryz4azefxv4shq",
+          "sized": true,
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL"
+          ],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "25"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554658169018",
+            "handle": "ethcali-tee-robot-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-TEE-ROBOT-2026-S",
+                "size": "S",
+                "variantId": "gid://shopify/ProductVariant/46749009707194",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909382647994",
+                "priceCop": 80000
+              },
+              {
+                "sku": "ETHCALI-TEE-ROBOT-2026-M",
+                "size": "M",
+                "variantId": "gid://shopify/ProductVariant/46749009739962",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909382680762",
+                "priceCop": 80000
+              },
+              {
+                "sku": "ETHCALI-TEE-ROBOT-2026-L",
+                "size": "L",
+                "variantId": "gid://shopify/ProductVariant/46749009772730",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909382713530",
+                "priceCop": 80000
+              },
+              {
+                "sku": "ETHCALI-TEE-ROBOT-2026-XL",
+                "size": "XL",
+                "variantId": "gid://shopify/ProductVariant/46749009805498",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909382746298",
+                "priceCop": 80000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:15.649Z"
+          }
+        },
+        {
+          "label": "Doge t-shirt — Merkle Collection",
+          "designSku": "ETHCALI-TEE-DOGE-MERKLE-2026",
+          "category": "T-shirt",
+          "name": {
+            "es": "Camiseta Doge — Merkle Collection",
+            "en": "Doge t-shirt — Merkle Collection"
+          },
+          "description": {
+            "es": "El doge en su escritorio. Edición global limitada.",
+            "en": "The doge at his desk. Limited global release."
+          },
+          "image": "tshirt-doge-merkle.png",
+          "imageCid": "bafybeie6j7vjbbswdwl52vqizldmf7aigqx4n7fqasjldnclkzbmmqvmvy",
+          "metadataCid": "bafkreifzuyku472qezlnmkeq2jvnghfcx2zyr2znhnzo4s6kyqukf2dot4",
+          "metadataURI": "ipfs://bafkreifzuyku472qezlnmkeq2jvnghfcx2zyr2znhnzo4s6kyqukf2dot4",
+          "sized": true,
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL"
+          ],
+          "onchainCap": 1,
+          "voucherCap": 4,
+          "active": true,
+          "prices": {
+            "USDC": "25"
+          },
+          "shopify": {
+            "productId": "gid://shopify/Product/8554658234554",
+            "handle": "ethcali-tee-doge-merkle-2026",
+            "variants": [
+              {
+                "sku": "ETHCALI-TEE-DOGE-MERKLE-2026-S",
+                "size": "S",
+                "variantId": "gid://shopify/ProductVariant/46749009871034",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909382811834",
+                "priceCop": 80000
+              },
+              {
+                "sku": "ETHCALI-TEE-DOGE-MERKLE-2026-M",
+                "size": "M",
+                "variantId": "gid://shopify/ProductVariant/46749009903802",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909382844602",
+                "priceCop": 80000
+              },
+              {
+                "sku": "ETHCALI-TEE-DOGE-MERKLE-2026-L",
+                "size": "L",
+                "variantId": "gid://shopify/ProductVariant/46749009936570",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909382877370",
+                "priceCop": 80000
+              },
+              {
+                "sku": "ETHCALI-TEE-DOGE-MERKLE-2026-XL",
+                "size": "XL",
+                "variantId": "gid://shopify/ProductVariant/46749009969338",
+                "inventoryItemId": "gid://shopify/InventoryItem/48909382910138",
+                "priceCop": 80000
+              }
+            ],
+            "syncedAt": "2026-09-23T03:59:16.398Z"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -11,6 +11,7 @@
  *   node scripts/estimate-deploy-cost.mjs              # all chains, full suite
  *   node scripts/estimate-deploy-cost.mjs celo         # one chain
  *   node scripts/estimate-deploy-cost.mjs celo donations   # donations only
+ *   node scripts/estimate-deploy-cost.mjs base swag        # Swag1155 impl + SwagFactory only
  */
 import { createPublicClient, http, formatEther, encodeDeployData } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -32,7 +33,7 @@ export const CHAINS = {
 };
 
 /** Role-management transactions performed after deployment. */
-const ROLE_TX_GAS = { full: 9n * 60_000n, donations: 7n * 60_000n };
+const ROLE_TX_GAS = { full: 9n * 60_000n, donations: 7n * 60_000n, swag: 0n };
 
 function artifact(name) {
   const p = path.join(__dirname, `../artifacts/contracts/${name}.sol/${name}.json`);
@@ -56,6 +57,7 @@ function buildPlan(scope) {
   ];
 
   if (scope === 'donations') return donations;
+  if (scope === 'swag') return [['Swag1155', []], ['SwagFactory', [swag, PLACEHOLDER]]];
 
   return [
     ['ZKPassportNFT', ['ZKPassport Verification', 'ZKPASS', zk, 'ethcali.com', 'ethcali-verification']],
@@ -124,7 +126,7 @@ const invokedDirectly =
 
 if (invokedDirectly) {
   const [chainArg, scopeArg] = process.argv.slice(2);
-  const scope = scopeArg === 'donations' ? 'donations' : 'full';
+  const scope = scopeArg === 'donations' || scopeArg === 'swag' ? scopeArg : 'full';
   const targets = chainArg ? [chainArg] : Object.keys(CHAINS);
 
   console.log(`\nPre-deploy gas estimate — scope: ${scope}\n`);

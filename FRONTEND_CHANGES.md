@@ -243,6 +243,8 @@ await writeContractAsync({
 
 ## Swag1155 / SwagFactory
 
+One inventory, two channels: `buy()` on-chain, or `claim()` with a voucher the backend signs after a paid Shopify order. Discover products through the factory — never hardcode a `Swag1155` address. Full API: [docs/SWAG1155_CONTRACT_REFERENCE.md](docs/SWAG1155_CONTRACT_REFERENCE.md).
+
 ### Enumerate active collections
 
 ```typescript
@@ -251,27 +253,81 @@ const collections = await readContract({
   abi:          SwagFactory_ABI,
   functionName: 'getActiveCollections',
 });
+const meta = await readContract({ address: swagFactoryAddress, abi: SwagFactory_ABI,
+  functionName: 'getCollectionMeta', args: [collections[0]] });   // { name, sku, treasury, ... }
 ```
 
-### Buy a variant
+### Read a variant
+
+Each size is a `tokenId` (1-indexed). Prices are **per payment token**, in that token's own base units.
 
 ```typescript
-// 1. Approve USDC spend first
-await writeContractAsync({
-  address:      USDC_ADDRESS,
-  abi:          ERC20_ABI,
-  functionName: 'approve',
-  args:         [swag1155Address, price],
-});
-
-// 2. Purchase
-await writeContractAsync({
-  address:      swag1155Address,
-  abi:          Swag1155_ABI,
-  functionName: 'purchase',
-  args:         [tokenId, quantity],
-});
+const tokenIds = await readContract({ address: collection, abi: Swag1155_ABI, functionName: 'listTokenIds' });
+const variant  = await readContract({ address: collection, abi: Swag1155_ABI, functionName: 'getVariant', args: [tokenId] });
+// { onchainCap, onchainMinted, voucherCap, voucherMinted, active }
+const tokens   = await readContract({ address: collection, abi: Swag1155_ABI, functionName: 'getPaymentTokens', args: [tokenId] });
+const price    = await readContract({ address: collection, abi: Swag1155_ABI, functionName: 'getTokenPrice', args: [tokenId, paymentToken] });
 ```
+
+Format with the token's own decimals — `formatUnits(price, decimals)`, USDC is 6, COPm is 18 — and show fiat context next to it. `remainingOnchain(tokenId)` is what the storefront can still sell; `remainingVoucher(tokenId)` is Shopify's stock.
+
+### Buy on-chain
+
+Gate the button on `canBuy` — it mirrors every check in `buy()` except balance and allowance, and returns the reason to show:
+
+```typescript
+const [allowed, reason] = await readContract({ address: collection, abi: Swag1155_ABI,
+  functionName: 'canBuy', args: [tokenId, quantity, paymentToken] });
+```
+
+ERC-20: approve exactly `price * quantity`, then buy with no `value`. Two pending flags (submit → hash, hash → allowance refetch) or users double-submit through the gap.
+
+```typescript
+await writeContractAsync({ address: paymentToken, abi: ERC20_ABI,
+  functionName: 'approve', args: [collection, price * quantity] });
+await writeContractAsync({ address: collection, abi: Swag1155_ABI,
+  functionName: 'buy', args: [tokenId, quantity, paymentToken] });
+```
+
+Native ETH: `paymentToken` is the sentinel `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` and `value` must equal `price * quantity` **exactly** — there is no refund path, anything else reverts `IncorrectEthAmount(expected, sent)`.
+
+```typescript
+await writeContractAsync({ address: collection, abi: Swag1155_ABI,
+  functionName: 'buy', args: [tokenId, quantity, ETH_TOKEN], value: price * quantity });
+```
+
+Proceeds go straight to the collection's `treasury`; the contract never holds funds.
+
+### Claim a Shopify order
+
+The backend signs an EIP-712 voucher after the order is paid. The buyer — or anyone, the mint always goes to `voucher.to` — submits it:
+
+```typescript
+// domain: { name: 'ETHCaliSwag', version: '1', chainId, verifyingContract: collection }
+// type:   Claim(uint256 tokenId, address to, uint256 quantity, bytes32 orderRef, uint256 deadline)
+const [allowed, reason] = await readContract({ address: collection, abi: Swag1155_ABI,
+  functionName: 'canClaim', args: [voucher, signature] });
+await writeContractAsync({ address: collection, abi: Swag1155_ABI,
+  functionName: 'claim', args: [voucher, signature] });
+```
+
+`orderRef` is burned on use, so a second submission reverts `VoucherAlreadyClaimed`; `orderClaimed(orderRef)` tells you before you try. It is also burned by an admin `cancelOrder(orderRef)` after a refund — `canClaim` then returns `"Order already claimed or cancelled"`. A signature is only valid on the collection it was signed for, and only from a key holding `SIGNER_ROLE` there.
+
+### Errors to translate
+
+| Revert | Show |
+|---|---|
+| `VariantNotFound`, `VariantNotActive` | not for sale |
+| `SoldOut(tokenId, remaining)` | only `remaining` left in this channel |
+| `PaymentTokenNotAccepted(tokenId, token)` | token not accepted for this size |
+| `IncorrectEthAmount(expected, sent)` | send exactly `expected` |
+| `EthNotAccepted` | do not send ETH with an ERC-20 purchase |
+| `VoucherExpired(deadline)` / `VoucherAlreadyClaimed(orderRef)` / `InvalidSignature` | voucher expired / already used or cancelled / not issued for this collection |
+| `EnforcedPause` | sales paused |
+
+Serials: every unit gets a sequential serial per `tokenId`, **starting at 0**, across both channels. They are not stored on-chain — each mint emits one `SerialsAssigned(tokenId indexed, to indexed, firstSerial, quantity)` covering `[firstSerial, firstSerial + quantity)`. Index that event (see `ethskills:indexing`) to answer "which wallet was serial N minted to"; `nextSerial(tokenId)` is the running count and always equals `totalMinted(tokenId)`. The log records the **mint** recipient — it is not updated on transfer.
+
+Admin (wallet app `/admin`): `cancelOrder(orderRef)` closes a refunded Shopify order so its voucher can never mint. It reverts `VoucherAlreadyClaimed` if the customer already claimed — surface that as "already delivered, refund needs manual handling", not as a generic failure.
 
 ---
 

@@ -40,7 +40,15 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
  * Order paid -> Shopify webhook -> your backend signs an EIP-712 voucher ->
  * buyer calls claim() whenever they like. No hot wallet holds a minting key,
  * no gas is spent on buyers who never claim, and `orderRef` makes a replayed
- * webhook a no-op rather than a double mint.
+ * webhook a no-op rather than a double mint. A refunded order is closed with
+ * cancelOrder(), which burns the same `orderRef` so its voucher is dead.
+ *
+ * ── Serials ──────────────────────────────────────────────────────────────────
+ *
+ * Every unit gets a sequential serial per tokenId, starting at 0, across both
+ * channels. Serials live in the event log, not in storage: each mint emits one
+ * SerialsAssigned(tokenId, to, firstSerial, quantity) and an indexer expands
+ * the range. Storage keeps only the counter, `nextSerial`.
  *
  * @dev Clone-only. The constructor sets `_initialized = true`, so a directly
  *      deployed instance can never be configured — get instances from
@@ -98,16 +106,18 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard, Pausable, EIP712 {
     mapping(uint256 => Variant) public variants;
     mapping(uint256 => string) private _tokenURIs;
     uint256[] private _tokenIds;
+    /// @dev Whether a tokenId is already in `_tokenIds`, so reconfiguring never duplicates it.
+    mapping(uint256 => bool) private _registered;
 
     /// @dev tokenId => payment token => unit price, in that token's own base units.
     mapping(uint256 => mapping(address => uint256)) public variantTokenPrice;
     mapping(uint256 => EnumerableSet.AddressSet) private _variantPaymentTokens;
 
-    /// @dev Serial numbers, so a physical item maps to a numbered token.
+    /// @dev Serials issued so far per tokenId. Always equals totalMinted(tokenId).
+    ///      Who got which serial is in the SerialsAssigned log, not in storage.
     mapping(uint256 => uint256) public nextSerial;
-    mapping(uint256 => mapping(uint256 => address)) public serialOwner;
 
-    /// @dev Spent vouchers, keyed on the Shopify order reference.
+    /// @dev Spent or cancelled vouchers, keyed on the Shopify order reference.
     mapping(bytes32 => bool) public orderClaimed;
 
     // ── Events ────────────────────────────────────────────────────────────────
@@ -129,6 +139,15 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard, Pausable, EIP712 {
         uint256 quantity,
         bytes32 indexed orderRef
     );
+    /// @notice An admin closed a Shopify order (refund, fraud) before it was claimed.
+    event OrderCancelled(bytes32 indexed orderRef);
+    /// @notice One mint issued serials [firstSerial, firstSerial + quantity) of `tokenId` to `to`.
+    event SerialsAssigned(
+        uint256 indexed tokenId,
+        address indexed to,
+        uint256 firstSerial,
+        uint256 quantity
+    );
 
     // ── Errors ────────────────────────────────────────────────────────────────
 
@@ -140,6 +159,8 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard, Pausable, EIP712 {
     error VariantNotActive(uint256 tokenId);
     error ZeroQuantity();
     error CapBelowMinted();
+    error EmptyVariant();
+    error ZeroPrice();
     error SoldOut(uint256 tokenId, uint256 remaining);
     error PaymentTokenNotAccepted(uint256 tokenId, address token);
     error IncorrectEthAmount(uint256 expected, uint256 sent);
@@ -227,7 +248,11 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard, Pausable, EIP712 {
      * @param voucherCap Units reserved for Shopify. Set the Shopify product's
      *                   inventory to this number.
      * @dev Neither cap may be cut below what that channel has already minted —
-     *      that would make `remaining` underflow and strand the counter.
+     *      that would make `remaining` underflow and strand the counter. Both
+     *      caps zero is rejected outright: "exists" is defined as having stock
+     *      in at least one channel, so such a variant would be listed by
+     *      listTokenIds() yet reported as VariantNotFound by everything else.
+     *      To take a variant off sale, set `active = false`.
      */
     function setVariant(
         uint256 tokenId,
@@ -235,11 +260,14 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard, Pausable, EIP712 {
         uint128 voucherCap,
         bool active
     ) public onlyRole(ADMIN_ROLE) {
+        if (onchainCap == 0 && voucherCap == 0) revert EmptyVariant();
+
         Variant storage v = variants[tokenId];
 
         if (onchainCap < v.onchainMinted || voucherCap < v.voucherMinted) revert CapBelowMinted();
 
-        if (v.onchainCap == 0 && v.voucherCap == 0 && bytes(_tokenURIs[tokenId]).length == 0) {
+        if (!_registered[tokenId]) {
+            _registered[tokenId] = true;
             _tokenIds.push(tokenId);
         }
 
@@ -271,13 +299,18 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard, Pausable, EIP712 {
     /**
      * @notice Set the on-chain unit price of a variant in one payment token.
      * @param price In the token's OWN base units. USDC is 6 decimals, so 50
-     *              USDC is 50_000_000 — not 50e18.
+     *              USDC is 50_000_000 — not 50e18. Must be non-zero: a zero
+     *              price would let anyone drain the on-chain allocation for
+     *              free. Free distribution goes through claim() vouchers,
+     *              which are signed per recipient and per order, not through
+     *              a zero price.
      */
     function setPaymentOption(uint256 tokenId, address token, uint256 price)
         external
         onlyRole(ADMIN_ROLE)
     {
         if (token == address(0)) revert PaymentTokenNotAccepted(tokenId, token);
+        if (price == 0) revert ZeroPrice();
         variantTokenPrice[tokenId][token] = price;
         _variantPaymentTokens[tokenId].add(token);
         emit PaymentOptionSet(tokenId, token, price);
@@ -383,6 +416,21 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard, Pausable, EIP712 {
         emit Claimed(voucher.tokenId, voucher.to, voucher.quantity, voucher.orderRef);
     }
 
+    /**
+     * @notice Close a Shopify order so its voucher can never be claimed —
+     *         for a refund, a chargeback or a fraudulent order.
+     * @dev Burns `orderRef` exactly as claim() does, so the same idempotency
+     *      key covers both outcomes. Reverts VoucherAlreadyClaimed if the ref
+     *      is already spent, whether by a claim or an earlier cancel: a cancel
+     *      that lands after the customer already minted must be loud, because
+     *      the merch is already in their wallet and the refund needs a human.
+     */
+    function cancelOrder(bytes32 orderRef) external onlyRole(ADMIN_ROLE) {
+        if (orderClaimed[orderRef]) revert VoucherAlreadyClaimed(orderRef);
+        orderClaimed[orderRef] = true;
+        emit OrderCancelled(orderRef);
+    }
+
     /// @notice The EIP-712 digest a backend must sign for `voucher`.
     function hashVoucher(ClaimVoucher calldata voucher) external view returns (bytes32) {
         return _hashVoucher(voucher);
@@ -405,12 +453,12 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard, Pausable, EIP712 {
 
     // ── Internal ──────────────────────────────────────────────────────────────
 
-    function _assignSerials(uint256 tokenId, address owner, uint256 quantity) internal {
-        uint256 next = nextSerial[tokenId];
-        for (uint256 i; i < quantity; i++) {
-            serialOwner[tokenId][next + i] = owner;
-        }
-        nextSerial[tokenId] = next + quantity;
+    /// @dev One event per mint, not per unit: a 50-unit buy costs one log, and
+    ///      the indexer expands [first, first + quantity) itself.
+    function _assignSerials(uint256 tokenId, address to, uint256 quantity) internal {
+        uint256 first = nextSerial[tokenId];
+        nextSerial[tokenId] = first + quantity;
+        emit SerialsAssigned(tokenId, to, first, quantity);
     }
 
     // ── Views ─────────────────────────────────────────────────────────────────
@@ -440,10 +488,6 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard, Pausable, EIP712 {
         return uint256(v.onchainMinted) + uint256(v.voucherMinted);
     }
 
-    function getSerialOwner(uint256 tokenId, uint256 serial) external view returns (address) {
-        return serialOwner[tokenId][serial];
-    }
-
     function uri(uint256 tokenId) public view override returns (string memory) {
         string memory custom = _tokenURIs[tokenId];
         return bytes(custom).length > 0 ? custom : super.uri(tokenId);
@@ -468,6 +512,11 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard, Pausable, EIP712 {
         if (!_variantPaymentTokens[tokenId].contains(paymentToken)) {
             return (false, "Payment token not accepted");
         }
+        // buy() computes price * quantity in checked arithmetic and would panic.
+        uint256 price = variantTokenPrice[tokenId][paymentToken];
+        if (price != 0 && quantity > type(uint256).max / price) {
+            return (false, "Quantity too large");
+        }
         return (true, "");
     }
 
@@ -478,7 +527,7 @@ contract Swag1155 is ERC1155, AccessControl, ReentrancyGuard, Pausable, EIP712 {
         returns (bool allowed, string memory reason)
     {
         if (block.timestamp > voucher.deadline) return (false, "Voucher expired");
-        if (orderClaimed[voucher.orderRef]) return (false, "Order already claimed");
+        if (orderClaimed[voucher.orderRef]) return (false, "Order already claimed or cancelled");
         if (voucher.quantity == 0) return (false, "Quantity must be greater than zero");
         if (voucher.to == address(0)) return (false, "Invalid recipient");
 

@@ -9,7 +9,8 @@ const ZERO = "0x0000000000000000000000000000000000000000";
 
 describe("SwagFactory", async function () {
   const { viem } = await network.connect();
-  const [deployer, factoryAdmin2, itemAdmin, buyer, treasury] = await viem.getWalletClients();
+  const [deployer, factoryAdmin2, itemAdmin, buyer, treasury, voucherSigner] =
+    await viem.getWalletClients();
 
   let usdc: any;
   let implementation: any;
@@ -97,6 +98,7 @@ describe("SwagFactory", async function () {
       treasury.account.address,
       itemAdmin.account.address,
       threeSizes(),
+      ZERO,
     ]);
 
     assert.equal(await factory.read.getCollectionCount(), 1n);
@@ -190,6 +192,52 @@ describe("SwagFactory", async function () {
     assert.deepEqual([...ids].sort((a: bigint, b: bigint) => Number(a - b)), [1n, 2n, 3n]);
   });
 
+  it("rejects a size with no stock in either channel", async function () {
+    await assert.rejects(
+      () =>
+        factory.write.deployCollection([
+          "Ghost Tee",
+          "GHOST-001",
+          treasury.account.address,
+          itemAdmin.account.address,
+          [
+            {
+              metadataURI: "ipfs://QmGhost/metadata.json",
+              onchainCap: 0n,
+              voucherCap: 0n,
+              active: true,
+              payments: [{ token: usdc.address, price: USDC(10) }],
+            },
+          ],
+          ZERO,
+        ]),
+      /EmptyVariant/
+    );
+  });
+
+  it("rejects a size priced at zero", async function () {
+    await assert.rejects(
+      () =>
+        factory.write.deployCollection([
+          "Free Tee",
+          "FREE-001",
+          treasury.account.address,
+          itemAdmin.account.address,
+          [
+            {
+              metadataURI: "ipfs://QmFree/metadata.json",
+              onchainCap: 5n,
+              voucherCap: 5n,
+              active: true,
+              payments: [{ token: usdc.address, price: 0n }],
+            },
+          ],
+          ZERO,
+        ]),
+      /ZeroPrice/
+    );
+  });
+
   it("the implementation itself cannot be initialized", async function () {
     await assert.rejects(
       () =>
@@ -239,6 +287,28 @@ describe("SwagFactory", async function () {
 
     const adminRole = await swag.read.ADMIN_ROLE();
     assert.equal(await swag.read.hasRole([adminRole, itemAdmin.account.address]), true);
+  });
+
+  // ── Voucher signer at deploy time ──────────────────────────────────────────
+
+  it("a collection deployed with a zero signer has no SIGNER_ROLE holder", async function () {
+    const [addr] = await factory.read.getCollections();
+    const swag = await viem.getContractAt("Swag1155", addr);
+    const signerRole = await swag.read.SIGNER_ROLE();
+
+    for (const candidate of [
+      voucherSigner.account.address,
+      itemAdmin.account.address,
+      deployer.account.address,
+      factory.address,
+      ZERO,
+    ]) {
+      assert.equal(
+        await swag.read.hasRole([signerRole, candidate]),
+        false,
+        `${candidate} must not hold SIGNER_ROLE`
+      );
+    }
   });
 
   it("itemAdmin can set a new variant on the Swag1155", async function () {
@@ -349,6 +419,7 @@ describe("SwagFactory", async function () {
           payments: [{ token: usdc.address, price: USDC(15) }],
         },
       ],
+      ZERO,
     ]);
 
     assert.equal(await factory.read.getCollectionCount(), 2n);
@@ -384,6 +455,7 @@ describe("SwagFactory", async function () {
             treasury.account.address,
             itemAdmin.account.address,
             threeSizes(),
+            ZERO,
           ],
           { account: buyer.account }
         ),
@@ -432,6 +504,7 @@ describe("SwagFactory", async function () {
             payments: [{ token: usdc.address, price: USDC(20) }],
           },
         ],
+        ZERO,
       ],
       { account: factoryAdmin2.account }
     );
@@ -455,6 +528,7 @@ describe("SwagFactory", async function () {
             treasury.account.address,
             itemAdmin.account.address,
             threeSizes(),
+            ZERO,
           ],
           { account: factoryAdmin2.account }
         ),
@@ -473,6 +547,7 @@ describe("SwagFactory", async function () {
           treasury.account.address,
           itemAdmin.account.address,
           threeSizes(),
+          ZERO,
         ]),
       /EmptyName/
     );
@@ -487,6 +562,7 @@ describe("SwagFactory", async function () {
           treasury.account.address,
           itemAdmin.account.address,
           threeSizes(),
+          ZERO,
         ]),
       /EmptySku/
     );
@@ -501,6 +577,7 @@ describe("SwagFactory", async function () {
           ZERO,
           itemAdmin.account.address,
           threeSizes(),
+          ZERO,
         ]),
       /InvalidTreasury/
     );
@@ -515,6 +592,7 @@ describe("SwagFactory", async function () {
           treasury.account.address,
           ZERO,
           threeSizes(),
+          ZERO,
         ]),
       /InvalidItemAdmin/
     );
@@ -529,6 +607,7 @@ describe("SwagFactory", async function () {
           treasury.account.address,
           itemAdmin.account.address,
           [],
+          ZERO,
         ]),
       /NoSizes/
     );
@@ -551,8 +630,60 @@ describe("SwagFactory", async function () {
               payments: [],
             },
           ],
+          ZERO,
         ]),
       /NoPaymentOptions/
     );
+  });
+  // ── Voucher signer granted by the factory (adds a collection — keep last) ──
+
+  it("a collection deployed with a signer can verify that signer's vouchers from block one", async function () {
+    const publicClient = await viem.getPublicClient();
+    const hash = await factory.write.deployCollection([
+      "ETH Cali Signed Tee",
+      "ETH-CALI-SIGNED-TEE-2026",
+      treasury.account.address,
+      itemAdmin.account.address,
+      [
+        {
+          metadataURI: "ipfs://QmSigned/metadata.json",
+          onchainCap: 5n,
+          voucherCap: 5n,
+          active: true,
+          payments: [{ token: usdc.address, price: USDC(15) }],
+        },
+      ],
+      voucherSigner.account.address,
+    ]);
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+    const all = await factory.read.getCollections();
+    const addr = all[all.length - 1];
+    const swag = await viem.getContractAt("Swag1155", addr);
+
+    const [signerRole, defaultAdmin, adminRole] = await Promise.all([
+      swag.read.SIGNER_ROLE(),
+      swag.read.DEFAULT_ADMIN_ROLE(),
+      swag.read.ADMIN_ROLE(),
+    ]);
+    assert.equal(await swag.read.hasRole([signerRole, voucherSigner.account.address]), true);
+    // The signer gets SIGNER_ROLE and nothing else.
+    assert.equal(await swag.read.hasRole([defaultAdmin, voucherSigner.account.address]), false);
+    assert.equal(await swag.read.hasRole([adminRole, voucherSigner.account.address]), false);
+    // Granting the signer did not leave the factory holding anything.
+    assert.equal(await swag.read.hasRole([defaultAdmin, factory.address]), false);
+    assert.equal(await swag.read.hasRole([adminRole, factory.address]), false);
+
+    // The event carries the signer so an indexer can tell which collections are claimable.
+    const logs = await publicClient.getContractEvents({
+      address: factory.address,
+      abi: factory.abi,
+      eventName: "CollectionDeployed",
+      fromBlock: receipt.blockNumber,
+      toBlock: receipt.blockNumber,
+    });
+    assert.equal(logs.length, 1);
+    assert.equal(logs[0].args.collection.toLowerCase(), addr.toLowerCase());
+    assert.equal(logs[0].args.signer.toLowerCase(), voucherSigner.account.address.toLowerCase());
   });
 });

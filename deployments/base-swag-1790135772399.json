@@ -30,12 +30,6 @@
     "deployer": "0x3B89Ad8CC39900778aBCdcc22bc83cAC031A415B",
     "swagAdmin": "0x3B89Ad8CC39900778aBCdcc22bc83cAC031A415B",
     "previousSwagFactory": "0x89fb2a22bbb309703019b34439ae70b7e6d81e96",
-    "note": "Recovered from chain after deploy-swag.ts died on read-back (RPC replica race), 2026-09-23",
-    "signer": "0x397798D66f6A563c2Ea51Cd6F0A708c7298062e6",
-    "treasury": "0xB6BDe4fB6dFBad5488Fa31Edf0F3730D9D86da64",
-    "itemAdmin": "0x3B89Ad8CC39900778aBCdcc22bc83cAC031A415B"
-  },
-  "swagCollections": {
-    "ETHCALI-SWAG-2026": "0xA5C02Ee3029Ce7f0FdD147734D11905E3cA99479"
+    "note": "Recovered from chain after deploy-swag.ts died on read-back (RPC replica race), 2026-09-23"
   }
 }

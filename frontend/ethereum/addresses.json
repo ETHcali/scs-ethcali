@@ -3,6 +3,8 @@
   "chainId": 1,
   "addresses": {
     "ZKPassportNFT": "0x607003f188c49ed6e0553805734b9990393402df",
-    "FaucetManager": "0x2940e286b41d279b61e484b98a08498e355e4778"
+    "FaucetManager": "0x2940e286b41d279b61e484b98a08498e355e4778",
+    "DonationVault": "0x223f70933a14E847D83ff1e906C8CCf6962d36d3",
+    "DonationReceipt1155": "0xA4E67a7bc9e17D6eBBCaa369727b9e8949D278e0"
   }
 }

@@ -1,5 +1,5 @@
 // Auto-generated contract addresses and types for Unichain Mainnet
-// Generated: 2026-08-15T18:01:21.730Z
+// Generated: 2026-09-23T04:00:18.602Z
 export const CONTRACTS = {
   "network": "unichain",
   "chainId": 130,
@@ -2744,6 +2744,12 @@ export const CONTRACTS = {
               "internalType": "address",
               "name": "creator",
               "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "signer",
+              "type": "address"
             }
           ],
           "name": "CollectionDeployed",
@@ -2980,9 +2986,14 @@ export const CONTRACTS = {
                   "type": "string"
                 },
                 {
-                  "internalType": "uint256",
-                  "name": "maxSupply",
-                  "type": "uint256"
+                  "internalType": "uint128",
+                  "name": "onchainCap",
+                  "type": "uint128"
+                },
+                {
+                  "internalType": "uint128",
+                  "name": "voucherCap",
+                  "type": "uint128"
                 },
                 {
                   "internalType": "bool",
@@ -3010,6 +3021,11 @@ export const CONTRACTS = {
               "internalType": "struct SwagFactory.VariantInit[]",
               "name": "sizes",
               "type": "tuple[]"
+            },
+            {
+              "internalType": "address",
+              "name": "signer",
+              "type": "address"
             }
           ],
           "name": "deployCollection",

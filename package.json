@@ -24,6 +24,8 @@
     "estimate:donations": "node scripts/estimate-deploy-cost.mjs celo donations",
     "deploy:donations:celo": "hardhat run scripts/deploy-donations.ts --network celo",
     "deploy:donations:base": "hardhat run scripts/deploy-donations.ts --network base",
+    "estimate:swag:base": "node scripts/estimate-deploy-cost.mjs base swag",
+    "deploy:swag:base": "hardhat run scripts/deploy-swag.ts --network base",
     "seed:swag": "hardhat run scripts/seed-swag.ts",
     "seed:swag:dry": "DRY_RUN=1 hardhat run scripts/seed-swag.ts",
     "seed:campaign:celo": "hardhat run scripts/seed-campaign.ts --network celo",

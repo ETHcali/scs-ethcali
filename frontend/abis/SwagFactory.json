@@ -140,6 +140,12 @@
         "internalType": "address",
         "name": "creator",
         "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "signer",
+        "type": "address"
       }
     ],
     "name": "CollectionDeployed",
@@ -376,9 +382,14 @@
             "type": "string"
           },
           {
-            "internalType": "uint256",
-            "name": "maxSupply",
-            "type": "uint256"
+            "internalType": "uint128",
+            "name": "onchainCap",
+            "type": "uint128"
+          },
+          {
+            "internalType": "uint128",
+            "name": "voucherCap",
+            "type": "uint128"
           },
           {
             "internalType": "bool",
@@ -406,6 +417,11 @@
         "internalType": "struct SwagFactory.VariantInit[]",
         "name": "sizes",
         "type": "tuple[]"
+      },
+      {
+        "internalType": "address",
+        "name": "signer",
+        "type": "address"
       }
     ],
     "name": "deployCollection",
