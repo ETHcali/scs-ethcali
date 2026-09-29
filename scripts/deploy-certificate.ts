@@ -123,8 +123,9 @@ async function main() {
     ...existing,
     builderCertificate: cert.address,
     network: networkName,
-    timestamp: new Date().toISOString(),
-    builderCertificateConfig: { deployer: deployerAddress, superAdmin, admins },
+    // Not the top-level `timestamp`: sync-contracts reads that as the swag
+    // collection's deployedAt, and this deploy is not that one.
+    builderCertificateConfig: { deployer: deployerAddress, superAdmin, admins, deployedAt: new Date().toISOString() },
   };
   fs.writeFileSync(latestPath, JSON.stringify(result, null, 2));
   fs.writeFileSync(path.join(deploymentsDir, `${networkName}-certificate-${Date.now()}.json`), JSON.stringify(result, null, 2));

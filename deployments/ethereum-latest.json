@@ -2,7 +2,7 @@
   "zkPassportNFT": "0x607003f188c49ed6e0553805734b9990393402df",
   "faucetManager": "0x2940e286b41d279b61e484b98a08498e355e4778",
   "network": "ethereum",
-  "timestamp": "2026-09-29T00:37:51.871Z",
+  "timestamp": "2026-09-23T07:50:17.097Z",
   "config": {
     "network": "ethereum",
     "superAdmin": "0x3C9204B25966591749450FB233D58E850e7C1f9F",
@@ -40,6 +40,7 @@
     "superAdmin": "0x35b0c64CeDC2fD1a7298984CBa5C7E402970BC6B",
     "admins": [
       "0x3C9204B25966591749450FB233D58E850e7C1f9F"
-    ]
+    ],
+    "deployedAt": "2026-09-29T00:37:51.871Z"
   }
 }

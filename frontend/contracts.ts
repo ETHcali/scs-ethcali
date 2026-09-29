@@ -1,5 +1,5 @@
 // Auto-generated multi-network contract addresses and types
-// Generated: 2026-09-29T00:46:04.096Z
+// Generated: 2026-09-29T00:46:40.600Z
 export const CONTRACTS = {
   "networks": {
     "base": {

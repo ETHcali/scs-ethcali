@@ -1,5 +1,5 @@
 // Auto-generated contract addresses and types for Base Mainnet
-// Generated: 2026-09-29T00:46:04.081Z
+// Generated: 2026-09-29T00:46:40.586Z
 export const CONTRACTS = {
   "network": "base",
   "chainId": 8453,
