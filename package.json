@@ -40,7 +40,8 @@
     "launch:donations": "node scripts/launch-donations.mjs",
     "launch:donations:go": "DRY_RUN=0 node scripts/launch-donations.mjs",
     "estimate:swag:ethereum": "node scripts/estimate-deploy-cost.mjs ethereum swag",
-    "deploy:swag:ethereum": "hardhat run scripts/deploy-swag.ts --network ethereum"
+    "deploy:swag:ethereum": "hardhat run scripts/deploy-swag.ts --network ethereum",
+    "deploy:certificate:ethereum": "hardhat run scripts/deploy-certificate.ts --network ethereum"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^3.0.6",

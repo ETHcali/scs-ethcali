@@ -1,5 +1,5 @@
 // Auto-generated contract addresses and types for Unichain Mainnet
-// Generated: 2026-09-23T04:00:18.602Z
+// Generated: 2026-09-29T00:46:40.591Z
 export const CONTRACTS = {
   "network": "unichain",
   "chainId": 130,

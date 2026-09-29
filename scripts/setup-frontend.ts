@@ -19,6 +19,7 @@ interface DeploymentResult {
   hackathonStaking?: string;
   donationVault?: string;
   donationReceipt?: string;
+  builderCertificate?: string;
   network: string;
   timestamp: string;
   config: {
@@ -96,6 +97,7 @@ async function main() {
   const stakingABI = readABI("HackathonStaking");
   const donationVaultABI = readABI("DonationVault");
   const donationReceiptABI = readABI("DonationReceipt1155");
+  const builderCertificateABI = readABI("BuilderCertificate");
 
   if (!nftABI.length || !faucetABI.length) {
     console.error("❌ Missing ABIs. Run 'npm run compile' first.");
@@ -167,6 +169,9 @@ async function main() {
         ...(deployment.donationReceipt && donationReceiptABI.length
           ? { DonationReceipt1155: { address: deployment.donationReceipt, abi: donationReceiptABI } }
           : {}),
+        ...(deployment.builderCertificate && builderCertificateABI.length
+          ? { BuilderCertificate: { address: deployment.builderCertificate, abi: builderCertificateABI } }
+          : {}),
       },
     };
 
@@ -197,6 +202,7 @@ async function main() {
         ...(deployment.hackathonStaking ? { HackathonStaking: deployment.hackathonStaking } : {}),
         ...(deployment.donationVault ? { DonationVault: deployment.donationVault } : {}),
         ...(deployment.donationReceipt ? { DonationReceipt1155: deployment.donationReceipt } : {}),
+        ...(deployment.builderCertificate ? { BuilderCertificate: deployment.builderCertificate } : {}),
       },
     };
 
@@ -264,6 +270,7 @@ export const NETWORK = "${networkName}" as const;
         ...(config.contracts.HackathonStaking ? { HackathonStaking: config.contracts.HackathonStaking.address } : {}),
         ...(config.contracts.DonationVault ? { DonationVault: config.contracts.DonationVault.address } : {}),
         ...(config.contracts.DonationReceipt1155 ? { DonationReceipt1155: config.contracts.DonationReceipt1155.address } : {}),
+        ...(config.contracts.BuilderCertificate ? { BuilderCertificate: config.contracts.BuilderCertificate.address } : {}),
       },
     };
   }
@@ -311,6 +318,12 @@ export const NETWORK = "${networkName}" as const;
     writeFileSync(
       join(abisDir, "DonationReceipt1155.json"),
       JSON.stringify(donationReceiptABI, null, 2)
+    );
+  }
+  if (builderCertificateABI.length) {
+    writeFileSync(
+      join(abisDir, "BuilderCertificate.json"),
+      JSON.stringify(builderCertificateABI, null, 2)
     );
   }
   console.log(`✅ Created frontend/abis/ (shared ABIs${factoryABI.length ? " including SwagFactory" : ""})`);

@@ -1,5 +1,5 @@
 // Auto-generated contract addresses and types for Celo Mainnet
-// Generated: 2026-09-23T04:00:18.604Z
+// Generated: 2026-09-29T00:46:40.594Z
 export const CONTRACTS = {
   "network": "celo",
   "chainId": 42220,
