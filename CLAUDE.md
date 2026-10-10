@@ -103,7 +103,7 @@ Every contract follows the same shape — match it rather than inventing a new o
   `test/helpers/zkpassport.ts`. The country list must be **sorted, unique, uppercase alpha-3**
   — ZKPassport compares it exactly with the proof's list. Minting is `mint(params, isIDCard)`.
   `mint` enforces the ZKPassport dashboard policy (domain `ethcali.org`, scope `policy-1`,
-  age 18+, strict sanctions, one exclusion list for nationality and issuing country, devMode
+  age 18+, non-strict sanctions (`SANCTIONS_STRICT`), one exclusion list for nationality and issuing country, devMode
   off, 7-day validity). Change the dashboard and the contract's list together
   (`setExcludedCountries`). The mock verifier evaluates the lists it is passed.
 - **Hardhat cannot decode a revert reason for a bare ETH transfer** into `receive()`.

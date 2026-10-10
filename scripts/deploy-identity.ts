@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
  * The policy is fixed here, not read from env, so a typo cannot deploy a
  * contract that rejects every proof. It mirrors the ZKPassport dashboard
  * policy (owner decision 2026-10-10): domain `ethcali.org`, scope `policy-1`,
- * age 18+, strict sanctions, and one exclusion list for nationality and
+ * age 18+, non-strict sanctions, and one exclusion list for nationality and
  * issuing country. Change the dashboard and this together.
  *
  * The deployer receives no role. ZKPassportNFT is owned by IDENTITY_OWNER from
@@ -94,7 +94,7 @@ async function main() {
   console.log(`💰 Balance:        ${formatEther(balance)} ETH`);
   console.log(`🪪 NFT owner:      ${owner}`);
   console.log(`🚰 Faucet admin:   ${faucetAdmin}  (DEFAULT_ADMIN_ROLE + ADMIN_ROLE)`);
-  console.log(`📜 Policy:         ${ZKPASSPORT_DOMAIN} / ${ZKPASSPORT_SCOPE}, 18+, sanctions, excluded ${EXCLUDED_COUNTRIES.join(" ")}`);
+  console.log(`📜 Policy:         ${ZKPASSPORT_DOMAIN} / ${ZKPASSPORT_SCOPE}, 18+, sanctions (non-strict), excluded ${EXCLUDED_COUNTRIES.join(" ")}`);
 
   const nftArgs = ["ZKPassport Verification", "ZKPASS", owner, ZKPASSPORT_DOMAIN, ZKPASSPORT_SCOPE, EXCLUDED_COUNTRIES, ZKPASSPORT_VERIFIER] as const;
 

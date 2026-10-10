@@ -13,7 +13,7 @@ import "./interfaces/IZKPassport.sol";
  * @notice Soulbound ERC721 representing a cryptographically verified ZKPassport identity.
  *         Proofs are verified on-chain by the ZKPassport verifier contract, and the
  *         contract enforces the same policy the app requests (ZKPassport dashboard
- *         policy for `domain` + `scope`): adult, sanctions-screened, and neither the
+ *         policy for `domain` + `scope`): adult, sanctions-screened (non-strict), and neither the
  *         nationality nor the issuing country on the exclusion list. A client that
  *         asks for a weaker proof still cannot mint.
  *         Stores: unique identifier (bytes32), personhood status, age 18+ flag, nationality.
@@ -43,6 +43,14 @@ contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
 
     /// @notice Minimum proven age
     uint8 public constant MIN_AGE = 18;
+
+    /**
+     * @notice The sanctions screen the proof must have run: non-strict matches on
+     *         name + date of birth or document number + nationality, so sharing a
+     *         name with a listed person is not enough to be refused (owner decision
+     *         2026-10-10). The app's `.sanctions()` request must use the same mode.
+     */
+    bool public constant SANCTIONS_STRICT = false;
 
     /// @dev ISO 3166-1 alpha-3 codes refused as nationality and as issuing country.
     string[] private _excludedCountries;
@@ -221,7 +229,7 @@ contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
     /**
      * @notice Mint a ZKPassport NFT by submitting a ZK proof verified on-chain.
      *         The proof must come from the dashboard policy for `domain` + `scope`:
-     *           .gte("age", 18).sanctions()
+     *           .gte("age", 18).sanctions()   (non-strict)
      *           .out("nationality", list).out("issuing_country", list)
      *         bound to msg.sender + block.chainid, devMode off, 7-day validity.
      * @param params   Proof parameters produced by zkPassport.getSolidityVerifierParameters()
@@ -266,8 +274,8 @@ contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
                 "ZKPassportNFT: issuing country not allowed"
             );
         }
-        // Reverts unless the proof screened against a sanctions root valid now.
-        helper.enforceSanctionsRoot(block.timestamp, true, params.committedInputs);
+        // Reverts unless the proof screened, in this mode, against a sanctions root valid now.
+        helper.enforceSanctionsRoot(block.timestamp, SANCTIONS_STRICT, params.committedInputs);
 
         // 5. Extract the disclosed claims (empty fields when the policy does not disclose them)
         DisclosedData memory disclosed = helper.getDisclosedData(params.committedInputs, isIDCard);

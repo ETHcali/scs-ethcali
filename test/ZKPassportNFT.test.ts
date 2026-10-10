@@ -169,6 +169,17 @@ describe("ZKPassportNFT", async function () {
     await expectMintRevert(user2.account, "sanctioned");
   });
 
+  it("Requires a non-strict sanctions proof (SANCTIONS_STRICT = false)", async function () {
+    assert.equal(await nftContract.read.SANCTIONS_STRICT(), false);
+    await setupMock({ uniqueId: uid("id-strict"), sender: user2.account.address });
+    await mockVerifier.write.setMockSanctionsStrict([true]);
+    try {
+      await expectMintRevert(user2.account, "sanctions mode mismatch");
+    } finally {
+      await mockVerifier.write.setMockSanctionsStrict([false]);
+    }
+  });
+
   it("Should reject a dev-mode proof before calling the verifier", async function () {
     await setupMock({ uniqueId: uid("id-dev"), sender: user2.account.address });
     const params = { ...EMPTY_PARAMS, serviceConfig: { ...EMPTY_PARAMS.serviceConfig, devMode: true } };

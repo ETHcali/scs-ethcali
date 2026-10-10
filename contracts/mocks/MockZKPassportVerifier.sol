@@ -20,6 +20,8 @@ contract MockZKPassportVerifier is IZKPassportVerifier, IZKPassportHelper {
     string  public mockNationality   = "USA";
     string  public mockIssuingCountry = "USA";
     bool    public mockSanctioned    = false;
+    /// @dev The sanctions mode the mock proof was generated in; the caller must claim the same.
+    bool    public mockSanctionsStrict = false;
 
     constructor() {
         mockChainId = block.chainid;
@@ -123,7 +125,12 @@ contract MockZKPassportVerifier is IZKPassportVerifier, IZKPassportHelper {
         return !_contains(countryList, mockIssuingCountry);
     }
 
-    function enforceSanctionsRoot(uint256, bool, bytes calldata) external view override {
+    function setMockSanctionsStrict(bool _strict) external {
+        mockSanctionsStrict = _strict;
+    }
+
+    function enforceSanctionsRoot(uint256, bool isStrict, bytes calldata) external view override {
+        require(isStrict == mockSanctionsStrict, "Mock: sanctions mode mismatch");
         require(!mockSanctioned, "Mock: sanctioned");
     }
 
