@@ -1,31 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it, before } from "node:test";
 import { network } from "hardhat";
-import { keccak256, toBytes } from "viem";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/** Deterministic bytes32 from a test label */
-function uid(label: string): `0x${string}` {
-  return keccak256(toBytes(label));
-}
-
-/** Empty ProofVerificationParams — the mock ignores all fields */
-const EMPTY_PARAMS = {
-  version: ("0x" + "00".repeat(32)) as `0x${string}`,
-  proofVerificationData: {
-    vkeyHash:     ("0x" + "00".repeat(32)) as `0x${string}`,
-    proof:        "0x" as `0x${string}`,
-    publicInputs: [] as `0x${string}`[],
-  },
-  committedInputs: "0x" as `0x${string}`,
-  serviceConfig: {
-    validityPeriodInSeconds: 0n,
-    domain:  "",
-    scope:   "",
-    devMode: false,
-  },
-};
+import {
+  deployZKPassport,
+  uid,
+  EMPTY_PARAMS,
+  EXCLUDED_COUNTRIES,
+  VALIDITY_PERIOD_SECONDS,
+} from "./helpers/zkpassport.js";
 
 // ── Test suite ────────────────────────────────────────────────────────────────
 
@@ -41,21 +23,7 @@ describe("ZKPassportNFT", async function () {
   before(async function () {
     deployerAddress = deployer.account.address;
     userAddress     = user.account.address;
-
-    // Deploy mock verifier
-    mockVerifier = await viem.deployContract("MockZKPassportVerifier", []);
-
-    // Deploy NFT contract (default verifier = real on-chain address)
-    nftContract = await viem.deployContract("ZKPassportNFT", [
-      "ZKPassport",
-      "ZKP",
-      deployerAddress,
-      "ethcali.com",
-      "ethcali-verification",
-    ]);
-
-    // Point to mock so tests work on local hardhat network
-    await nftContract.write.setVerifier([mockVerifier.address]);
+    ({ nft: nftContract, verifier: mockVerifier } = await deployZKPassport(viem, deployerAddress));
   });
 
   /** Configure the mock for a mint call */
@@ -66,6 +34,8 @@ describe("ZKPassportNFT", async function () {
     scopesValid?:  boolean;
     isOver18?:     boolean;
     nationality?:  string;
+    issuingCountry?: string;
+    sanctioned?:   boolean;
     chainId?:      bigint;
   }) {
     const publicClient = await viem.getPublicClient();
@@ -80,6 +50,17 @@ describe("ZKPassportNFT", async function () {
       opts.nationality ?? "USA",
     ]);
     await mockVerifier.write.setChainId([chainId]);
+    await mockVerifier.write.setMockPolicy([opts.issuingCountry ?? "USA", opts.sanctioned ?? false]);
+  }
+
+  /** Expect a mint by `account` to revert with `reason` in its message. */
+  async function expectMintRevert(account: any, reason: string, params: any = EMPTY_PARAMS) {
+    try {
+      await nftContract.write.mint([params, false], { account });
+      assert.fail("Should have reverted");
+    } catch (error: any) {
+      assert(error.message.includes(reason), `expected "${reason}", got: ${error.message.slice(0, 200)}`);
+    }
   }
 
   // ── Tests ──────────────────────────────────────────────────────────────────
@@ -166,13 +147,84 @@ describe("ZKPassportNFT", async function () {
     }
   });
 
-  it("Should store isOver18 = false when proof indicates under 18", async function () {
-    await setupMock({ uniqueId: uid("id-user2"), sender: user2.account.address, isOver18: false, nationality: "MEX" });
-    await nftContract.write.mint([EMPTY_PARAMS, false], { account: user2.account });
+  // ── Policy (dashboard policy-1, owner decision 2026-10-10) ───────────────────
 
+  it("Should reject a proof under the minimum age", async function () {
+    await setupMock({ uniqueId: uid("id-minor"), sender: user2.account.address, isOver18: false });
+    await expectMintRevert(user2.account, "under minimum age");
+  });
+
+  it("Should reject an excluded nationality", async function () {
+    await setupMock({ uniqueId: uid("id-nat"), sender: user2.account.address, nationality: "PRK" });
+    await expectMintRevert(user2.account, "nationality not allowed");
+  });
+
+  it("Should reject a document issued by an excluded country", async function () {
+    await setupMock({ uniqueId: uid("id-issuer"), sender: user2.account.address, issuingCountry: "IRN" });
+    await expectMintRevert(user2.account, "issuing country not allowed");
+  });
+
+  it("Should reject a proof that fails the sanctions screen", async function () {
+    await setupMock({ uniqueId: uid("id-sanctioned"), sender: user2.account.address, sanctioned: true });
+    await expectMintRevert(user2.account, "sanctioned");
+  });
+
+  it("Should reject a dev-mode proof before calling the verifier", async function () {
+    await setupMock({ uniqueId: uid("id-dev"), sender: user2.account.address });
+    const params = { ...EMPTY_PARAMS, serviceConfig: { ...EMPTY_PARAMS.serviceConfig, devMode: true } };
+    await expectMintRevert(user2.account, "dev mode proof", params);
+  });
+
+  it("Should reject a proof with another validity period", async function () {
+    await setupMock({ uniqueId: uid("id-validity"), sender: user2.account.address });
+    const params = { ...EMPTY_PARAMS, serviceConfig: { ...EMPTY_PARAMS.serviceConfig, validityPeriodInSeconds: VALIDITY_PERIOD_SECONDS + 1n } };
+    await expectMintRevert(user2.account, "invalid validity period", params);
+  });
+
+  it("Should mint Ukrainian nationals (UKR is not excluded)", async function () {
+    await setupMock({ uniqueId: uid("id-ukr"), sender: user2.account.address, nationality: "UKR", issuingCountry: "UKR" });
+    await nftContract.write.mint([EMPTY_PARAMS, false], { account: user2.account });
     const data = await nftContract.read.getTokenData([1n]);
-    assert.equal(data.isOver18, false);
-    assert.equal(data.nationality, "MEX");
+    assert.equal(data.isOver18, true);
+    assert.equal(data.nationality, "UKR");
+  });
+
+  it("canMint explains why an address cannot mint", async function () {
+    const [okUser, reasonUser] = await nftContract.read.canMint([user3.account.address]);
+    assert.equal(okUser, true);
+    assert.equal(reasonUser, "");
+    const [okHolder, reasonHolder] = await nftContract.read.canMint([userAddress]);
+    assert.equal(okHolder, false);
+    assert.match(reasonHolder, /already has an NFT/);
+  });
+
+  it("stores the exclusion list it was deployed with", async function () {
+    assert.deepEqual(await nftContract.read.excludedCountries(), EXCLUDED_COUNTRIES);
+  });
+
+  it("Only the owner can change the exclusion list, and only to alpha-3 codes", async function () {
+    await assert.rejects(
+      nftContract.write.setExcludedCountries([["PRK"]], { account: user.account }),
+      /OwnableUnauthorizedAccount/
+    );
+    await assert.rejects(nftContract.write.setExcludedCountries([["KP"]]), /ISO alpha-3/);
+
+    // An empty list switches the country checks off; the age and sanctions checks remain.
+    await nftContract.write.setExcludedCountries([[]]);
+    await setupMock({ uniqueId: uid("id-empty-list"), sender: user3.account.address, nationality: "PRK", issuingCountry: "PRK" });
+    await nftContract.write.mint([EMPTY_PARAMS, false], { account: user3.account });
+    assert.equal(await nftContract.read.hasNFTByAddress([user3.account.address]), true);
+
+    await nftContract.write.setExcludedCountries([EXCLUDED_COUNTRIES]);
+    assert.deepEqual(await nftContract.read.excludedCountries(), EXCLUDED_COUNTRIES);
+  });
+
+  it("Should refuse an empty domain or scope", async function () {
+    await assert.rejects(
+      viem.deployContract("ZKPassportNFT", ["Z", "Z", deployerAddress, "", "policy-1", EXCLUDED_COUNTRIES]),
+      /empty domain/
+    );
+    await assert.rejects(nftContract.write.setScope([""]), /empty scope/);
   });
 
   it("hasNFTByAddress returns true for minted address", async function () {
@@ -180,7 +232,7 @@ describe("ZKPassportNFT", async function () {
   });
 
   it("hasNFTByAddress returns false for unminted address", async function () {
-    assert.equal(await nftContract.read.hasNFTByAddress([user3.account.address]), false);
+    assert.equal(await nftContract.read.hasNFTByAddress([deployerAddress]), false);
   });
 
   it("hasNFTByIdentifier returns true for used identifier", async function () {

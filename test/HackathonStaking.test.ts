@@ -1,29 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it, before } from "node:test";
 import { network } from "hardhat";
-import { parseEther, parseUnits, keccak256, toBytes } from "viem";
+import { parseEther, parseUnits } from "viem";
+import { deployZKPassport, mintPassport as mintZKPassport } from "./helpers/zkpassport.js";
 
-/** Deterministic bytes32 from a test label */
-function uid(label: string): `0x${string}` {
-  return keccak256(toBytes(label));
-}
-
-/** Empty ProofVerificationParams — the mock verifier ignores every field */
-const EMPTY_PARAMS = {
-  version: ("0x" + "00".repeat(32)) as `0x${string}`,
-  proofVerificationData: {
-    vkeyHash: ("0x" + "00".repeat(32)) as `0x${string}`,
-    proof: "0x" as `0x${string}`,
-    publicInputs: [] as `0x${string}`[],
-  },
-  committedInputs: "0x" as `0x${string}`,
-  serviceConfig: {
-    validityPeriodInSeconds: 0n,
-    domain: "",
-    scope: "",
-    devMode: false,
-  },
-};
 
 describe("HackathonStaking", async function () {
   const { viem } = await network.connect();
@@ -72,32 +52,11 @@ describe("HackathonStaking", async function () {
 
   /** Mint a ZKPassport NFT to `account` via the mock verifier. */
   async function mintPassport(account: any, label: string) {
-    const chainId = BigInt(await publicClient.getChainId());
-    await mockVerifier.write.setMockResult([
-      true,                    // verified
-      uid(label),              // uniqueId
-      true,                    // scopesValid
-      account.address,         // sender
-      true,                    // isOver18
-      "COL",                   // nationality
-    ]);
-    await mockVerifier.write.setChainId([chainId]);
-    await zkPassportNFT.write.mint([EMPTY_PARAMS, false], { account });
+    await mintZKPassport(viem, zkPassportNFT, mockVerifier, account, label);
   }
 
   before(async function () {
-    mockVerifier = await viem.deployContract("MockZKPassportVerifier", []);
-
-    zkPassportNFT = await viem.deployContract("ZKPassportNFT", [
-      "ZKPassport",
-      "ZKPASS",
-      owner.account.address,
-      "ethcali.com",
-      "ethcali-verification",
-    ]);
-
-    // Point at the mock so minting works on the local network.
-    await zkPassportNFT.write.setVerifier([mockVerifier.address]);
+    ({ nft: zkPassportNFT, verifier: mockVerifier } = await deployZKPassport(viem, owner.account.address, { symbol: "ZKPASS" }));
 
     staking = await viem.deployContract("HackathonStaking", [
       zkPassportNFT.address,

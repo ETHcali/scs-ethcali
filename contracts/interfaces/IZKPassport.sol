@@ -81,6 +81,25 @@ interface IZKPassportHelper {
         uint8          minAge,
         bytes calldata committedInputs
     ) external view returns (bool);
+
+    /// @notice True when the proven nationality is none of `countryList` (ISO alpha-3).
+    function isNationalityOut(
+        string[] calldata countryList,
+        bytes    calldata committedInputs
+    ) external view returns (bool);
+
+    /// @notice True when the document's issuing country is none of `countryList` (ISO alpha-3).
+    function isIssuingCountryOut(
+        string[] calldata countryList,
+        bytes    calldata committedInputs
+    ) external view returns (bool);
+
+    /// @notice Reverts unless the proof screened against a sanctions root valid at `currentTimestamp`.
+    function enforceSanctionsRoot(
+        uint256        currentTimestamp,
+        bool           isStrict,
+        bytes calldata committedInputs
+    ) external view;
 }
 
 /**

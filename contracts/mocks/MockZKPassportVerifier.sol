@@ -18,6 +18,8 @@ contract MockZKPassportVerifier is IZKPassportVerifier, IZKPassportHelper {
     uint256 public mockChainId;
     bool    public mockIsOver18      = true;
     string  public mockNationality   = "USA";
+    string  public mockIssuingCountry = "USA";
+    bool    public mockSanctioned    = false;
 
     constructor() {
         mockChainId = block.chainid;
@@ -50,6 +52,12 @@ contract MockZKPassportVerifier is IZKPassportVerifier, IZKPassportHelper {
 
     function setChainId(uint256 _chainId) external {
         mockChainId = _chainId;
+    }
+
+    /// @notice The document's issuing country and whether the sanctions check fails.
+    function setMockPolicy(string calldata _issuingCountry, bool _sanctioned) external {
+        mockIssuingCountry = _issuingCountry;
+        mockSanctioned     = _sanctioned;
     }
 
     // ── IZKPassportVerifier ───────────────────────────────────────────────────
@@ -94,6 +102,36 @@ contract MockZKPassportVerifier is IZKPassportVerifier, IZKPassportHelper {
         returns (bool)
     {
         return mockIsOver18;
+    }
+
+    /// @dev Evaluates the list the caller passed, so a test proves the contract sends the right one.
+    function isNationalityOut(string[] calldata countryList, bytes calldata)
+        external
+        view
+        override
+        returns (bool)
+    {
+        return !_contains(countryList, mockNationality);
+    }
+
+    function isIssuingCountryOut(string[] calldata countryList, bytes calldata)
+        external
+        view
+        override
+        returns (bool)
+    {
+        return !_contains(countryList, mockIssuingCountry);
+    }
+
+    function enforceSanctionsRoot(uint256, bool, bytes calldata) external view override {
+        require(!mockSanctioned, "Mock: sanctioned");
+    }
+
+    function _contains(string[] calldata list, string memory value) private pure returns (bool) {
+        for (uint256 i = 0; i < list.length; i++) {
+            if (keccak256(bytes(list[i])) == keccak256(bytes(value))) return true;
+        }
+        return false;
     }
 
     function getDisclosedData(bytes calldata, bool)
