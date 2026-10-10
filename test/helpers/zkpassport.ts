@@ -41,8 +41,11 @@ export const EMPTY_PARAMS = {
 export const DEFAULT_DOMAIN = "ethcali.org";
 export const DEFAULT_SCOPE = "policy-1";
 
-/** The production exclusion list (owner decision 2026-10-10), for nationality and issuing country. */
-export const EXCLUDED_COUNTRIES = ["PRK", "IRN", "SYR", "CUB", "VEN", "RUS", "BLR", "YEM", "SDN", "AFG", "MMR", "ZWE"];
+/**
+ * The production exclusion list (owner decision 2026-10-10), for nationality and
+ * issuing country. Sorted: ZKPassport requires the proof's list in that order.
+ */
+export const EXCLUDED_COUNTRIES = ["AFG", "BLR", "CUB", "IRN", "MMR", "PRK", "RUS", "SDN", "SYR", "VEN", "YEM", "ZWE"];
 
 /**
  * Deploy ZKPassportNFT wired to a mock verifier.
@@ -63,10 +66,9 @@ export async function deployZKPassport(
     DEFAULT_DOMAIN,
     DEFAULT_SCOPE,
     EXCLUDED_COUNTRIES,
+    // The verifier is fixed at deploy; locally it is the mock.
+    verifier.address,
   ]);
-
-  // Point at the mock so minting works on the local network.
-  await nft.write.setVerifier([verifier.address]);
 
   return { nft, verifier };
 }

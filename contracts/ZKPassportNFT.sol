@@ -25,12 +25,12 @@ contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
 
     // ── ZKPassport verifier ───────────────────────────────────────────────────
 
-    /// @notice Deterministic ZKPassport verifier address (Base + Ethereum Mainnet)
-    address public constant ZKPASSPORT_VERIFIER_ADDRESS =
-        0x1D000001000EFD9a6371f4d90bB8920D5431c0D8;
-
-    /// @notice Active verifier instance (owner-updatable for future chain support)
-    IZKPassportVerifier public zkPassportVerifier;
+    /**
+     * @notice ZKPassport's root verifier (0x1D00…c0D8 on Ethereum and Base). Fixed
+     *         at deploy: an owner who could repoint it could mint to anyone, and the
+     *         faucet trusts every holder. The root routes new proof versions itself.
+     */
+    IZKPassportVerifier public immutable zkPassportVerifier;
 
     /// @notice Domain used in the SDK query — must match exactly
     string public domain;
@@ -78,7 +78,6 @@ contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
         string          nationality
     );
     event MetadataUpdated(string imageURI, string description, string externalURL, bool useIPFS);
-    event VerifierUpdated(address indexed newVerifier);
     event ExcludedCountriesUpdated(string[] countries);
 
     // ── Constructor ───────────────────────────────────────────────────────────
@@ -89,7 +88,9 @@ contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
      * @param initialOwner Contract owner (use address(0) for deployer)
      * @param _domain      Domain registered with ZKPassport SDK (e.g. "ethcali.com")
      * @param _scope       Scope used in the SDK query (e.g. "policy-1")
-     * @param excludedCountries_ ISO alpha-3 codes refused as nationality and issuing country
+     * @param excludedCountries_ ISO alpha-3 codes refused as nationality and issuing country,
+     *                    sorted ascending (ZKPassport requires the proof's list in that order)
+     * @param verifier     ZKPassport's root verifier
      */
     constructor(
         string memory name,
@@ -97,11 +98,13 @@ contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
         address       initialOwner,
         string memory _domain,
         string memory _scope,
-        string[] memory excludedCountries_
+        string[] memory excludedCountries_,
+        address verifier
     ) ERC721(name, symbol) Ownable(initialOwner == address(0) ? msg.sender : initialOwner) {
         require(bytes(_domain).length > 0, "ZKPassportNFT: empty domain");
         require(bytes(_scope).length > 0, "ZKPassportNFT: empty scope");
-        zkPassportVerifier = IZKPassportVerifier(ZKPASSPORT_VERIFIER_ADDRESS);
+        require(verifier.code.length > 0, "ZKPassportNFT: verifier has no code");
+        zkPassportVerifier = IZKPassportVerifier(verifier);
         domain             = _domain;
         scope              = _scope;
         _setExcludedCountries(excludedCountries_);
@@ -109,17 +112,12 @@ contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
         useIPFSImage       = false;
     }
 
-    // ── Admin: verifier & query config ────────────────────────────────────────
-
-    /**
-     * @notice Update the ZKPassport verifier address (e.g. after a new deployment)
-     * @param verifierAddress New verifier contract address
-     */
-    function setVerifier(address verifierAddress) external onlyOwner {
-        require(verifierAddress != address(0), "ZKPassportNFT: invalid verifier address");
-        zkPassportVerifier = IZKPassportVerifier(verifierAddress);
-        emit VerifierUpdated(verifierAddress);
-    }
+    // ── Admin: query config ───────────────────────────────────────────────────
+    //
+    // Domain, scope and the exclusion list stay settable so a mismatch with the
+    // dashboard policy is fixable without a redeploy. Changing the scope opens a
+    // new nullifier space (one person could mint again from another address), so
+    // these are owner powers to hold in a multisig.
 
     /**
      * @notice Update the SDK domain (must match the domain used to build the query)
@@ -147,9 +145,26 @@ contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
         _setExcludedCountries(countries);
     }
 
+    /// @dev Upper bound so a list can never make the setter or every mint run out of gas.
+    uint256 private constant MAX_EXCLUDED_COUNTRIES = 64;
+
+    /**
+     * @dev ZKPassport compares this list with the one committed in the proof: it
+     *      must match exactly and be sorted alphabetically. Strictly ascending
+     *      uppercase alpha-3 codes, so a mis-ordered or lowercase list is refused
+     *      here instead of silently failing every real mint.
+     */
     function _setExcludedCountries(string[] memory countries) private {
+        require(countries.length <= MAX_EXCLUDED_COUNTRIES, "ZKPassportNFT: too many countries");
         for (uint256 i = 0; i < countries.length; i++) {
-            require(bytes(countries[i]).length == 3, "ZKPassportNFT: country must be ISO alpha-3");
+            bytes memory code = bytes(countries[i]);
+            require(code.length == 3, "ZKPassportNFT: country must be ISO alpha-3");
+            for (uint256 j = 0; j < 3; j++) {
+                require(code[j] >= "A" && code[j] <= "Z", "ZKPassportNFT: country must be uppercase A-Z");
+            }
+            if (i > 0) {
+                require(bytes3(code) > bytes3(bytes(countries[i - 1])), "ZKPassportNFT: countries must be sorted and unique");
+            }
         }
         _excludedCountries = countries;
         emit ExcludedCountriesUpdated(countries);
@@ -282,7 +297,6 @@ contract ZKPassportNFT is ERC721, ERC721URIStorage, Ownable {
      */
     function canMint(address user) external view returns (bool, string memory) {
         if (_hasNFT[user]) return (false, "Address already has an NFT");
-        if (address(zkPassportVerifier) == address(0)) return (false, "No verifier configured");
         return (true, "");
     }
 

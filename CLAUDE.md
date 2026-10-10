@@ -97,8 +97,11 @@ Every contract follows the same shape — match it rather than inventing a new o
   `SwagFactory.deployCollection()`.
 - **`Swag1155` prices are per payment token** (`setPaymentOption`), not a field on the
   variant. `buy()` takes a `paymentToken` argument.
-- **`ZKPassportNFT`'s constructor takes 6 args** (name, symbol, owner, domain, scope,
-  excludedCountries) and minting is proof-based `mint(params, isIDCard)` against a verifier.
+- **`ZKPassportNFT`'s constructor takes 7 args** (name, symbol, owner, domain, scope,
+  excludedCountries, verifier). The verifier is **immutable** (no `setVerifier`: an owner who
+  could repoint it could mint to anyone and drain the faucet); tests pass the mock there via
+  `test/helpers/zkpassport.ts`. The country list must be **sorted, unique, uppercase alpha-3**
+  — ZKPassport compares it exactly with the proof's list. Minting is `mint(params, isIDCard)`.
   `mint` enforces the ZKPassport dashboard policy (domain `ethcali.org`, scope `policy-1`,
   age 18+, strict sanctions, one exclusion list for nationality and issuing country, devMode
   off, 7-day validity). Change the dashboard and the contract's list together

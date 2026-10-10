@@ -221,7 +221,7 @@ describe("ZKPassportNFT", async function () {
 
   it("Should refuse an empty domain or scope", async function () {
     await assert.rejects(
-      viem.deployContract("ZKPassportNFT", ["Z", "Z", deployerAddress, "", "policy-1", EXCLUDED_COUNTRIES]),
+      viem.deployContract("ZKPassportNFT", ["Z", "Z", deployerAddress, "", "policy-1", EXCLUDED_COUNTRIES, mockVerifier.address]),
       /empty domain/
     );
     await assert.rejects(nftContract.write.setScope([""]), /empty scope/);
@@ -260,23 +260,32 @@ describe("ZKPassportNFT", async function () {
     }
   });
 
-  it("Should allow owner to update the verifier address", async function () {
-    const newMock = await viem.deployContract("MockZKPassportVerifier", []);
-    await nftContract.write.setVerifier([newMock.address]);
-    // Restore
-    await nftContract.write.setVerifier([mockVerifier.address]);
+  it("Has no way to repoint the verifier", async function () {
+    assert.equal((nftContract.abi as any[]).some((f) => f.name === "setVerifier"), false);
+    assert.equal((await nftContract.read.zkPassportVerifier()).toLowerCase(), mockVerifier.address.toLowerCase());
   });
 
-  it("Should prevent non-owner from updating the verifier address", async function () {
-    try {
-      await nftContract.write.setVerifier([mockVerifier.address], { account: user.account });
-      assert.fail("Should have reverted");
-    } catch (error: any) {
-      assert(
-        error.message.includes("OwnableUnauthorizedAccount") ||
-        error.message.includes("caller is not the owner")
-      );
-    }
+  it("Refuses a verifier without code", async function () {
+    await assert.rejects(
+      viem.deployContract("ZKPassportNFT", ["Z", "Z", deployerAddress, "ethcali.org", "policy-1", EXCLUDED_COUNTRIES, user.account.address]),
+      /verifier has no code/
+    );
+  });
+
+  it("Refuses a country list that is unsorted, duplicated, lowercase or too long", async function () {
+    await assert.rejects(nftContract.write.setExcludedCountries([["PRK", "IRN"]]), /sorted and unique/);
+    await assert.rejects(nftContract.write.setExcludedCountries([["IRN", "IRN"]]), /sorted and unique/);
+    await assert.rejects(nftContract.write.setExcludedCountries([["prk"]]), /uppercase A-Z/);
+    const tooMany = Array.from({ length: 65 }, (_, i) => `A${String.fromCharCode(65 + Math.floor(i / 26))}${String.fromCharCode(65 + (i % 26))}`);
+    await assert.rejects(nftContract.write.setExcludedCountries([tooMany]), /too many countries/);
+    assert.deepEqual(await nftContract.read.excludedCountries(), EXCLUDED_COUNTRIES);
+  });
+
+  it("A refused mint consumes neither the identifier nor the address", async function () {
+    await setupMock({ uniqueId: uid("id-retry"), sender: deployerAddress, nationality: "PRK" });
+    await expectMintRevert(deployer.account, "nationality not allowed");
+    assert.equal(await nftContract.read.hasNFTByIdentifier([uid("id-retry")]), false);
+    assert.equal(await nftContract.read.hasNFTByAddress([deployerAddress]), false);
   });
 });
 

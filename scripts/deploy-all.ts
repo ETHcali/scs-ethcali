@@ -203,8 +203,10 @@ async function main() {
     config.zkPassportAdmin as `0x${string}`,
     process.env.ZKPASSPORT_DOMAIN  || "ethcali.org",
     process.env.ZKPASSPORT_SCOPE   || "policy-1",
-    // Same list as scripts/deploy-identity.ts and the ZKPassport dashboard policy.
-    ["PRK", "IRN", "SYR", "CUB", "VEN", "RUS", "BLR", "YEM", "SDN", "AFG", "MMR", "ZWE"],
+    // Same sorted list as scripts/deploy-identity.ts and the ZKPassport dashboard policy.
+    ["AFG", "BLR", "CUB", "IRN", "MMR", "PRK", "RUS", "SDN", "SYR", "VEN", "YEM", "ZWE"],
+    // ZKPassport's root verifier (Ethereum and Base only; elsewhere this deploy reverts).
+    "0x1D000001000EFD9a6371f4d90bB8920D5431c0D8",
   ]);
   const zkPassportAddress = zkPassportNFT.address;
   console.log(`   ZKPassportNFT deployed: ${zkPassportAddress}`);

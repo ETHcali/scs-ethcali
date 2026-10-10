@@ -40,8 +40,9 @@ const __dirname = path.dirname(__filename);
 
 const ZKPASSPORT_DOMAIN = "ethcali.org";
 const ZKPASSPORT_SCOPE = "policy-1";
-const EXCLUDED_COUNTRIES = ["PRK", "IRN", "SYR", "CUB", "VEN", "RUS", "BLR", "YEM", "SDN", "AFG", "MMR", "ZWE"];
-/** ZKPassport's root verifier; the NFT's constructor points at it. Must have code where we deploy. */
+/** Sorted: ZKPassport requires the proof's exclusion list in alphabetical order, and the contract enforces it. */
+const EXCLUDED_COUNTRIES = ["AFG", "BLR", "CUB", "IRN", "MMR", "PRK", "RUS", "SDN", "SYR", "VEN", "YEM", "ZWE"];
+/** ZKPassport's root verifier, fixed in the NFT at deploy. Must have code where we deploy. */
 const ZKPASSPORT_VERIFIER = "0x1D000001000EFD9a6371f4d90bB8920D5431c0D8";
 
 const CHAIN_ID_TO_NETWORK: Record<number, string> = {
@@ -95,7 +96,7 @@ async function main() {
   console.log(`🚰 Faucet admin:   ${faucetAdmin}  (DEFAULT_ADMIN_ROLE + ADMIN_ROLE)`);
   console.log(`📜 Policy:         ${ZKPASSPORT_DOMAIN} / ${ZKPASSPORT_SCOPE}, 18+, sanctions, excluded ${EXCLUDED_COUNTRIES.join(" ")}`);
 
-  const nftArgs = ["ZKPassport Verification", "ZKPASS", owner, ZKPASSPORT_DOMAIN, ZKPASSPORT_SCOPE, EXCLUDED_COUNTRIES] as const;
+  const nftArgs = ["ZKPassport Verification", "ZKPASS", owner, ZKPASSPORT_DOMAIN, ZKPASSPORT_SCOPE, EXCLUDED_COUNTRIES, ZKPASSPORT_VERIFIER] as const;
 
   // ── Cost vs balance, before anything is sent ─────────────────────────────
   const nftArtifact = artifact("ZKPassportNFT");
