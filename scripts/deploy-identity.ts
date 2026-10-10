@@ -20,11 +20,15 @@ const __dirname = path.dirname(__filename);
  * age 18+, non-strict sanctions, and one exclusion list for nationality and
  * issuing country. Change the dashboard and this together.
  *
- * The deployer receives no role. ZKPassportNFT is owned by IDENTITY_OWNER from
- * the constructor; FaucetManager gives DEFAULT_ADMIN_ROLE + ADMIN_ROLE to
- * FAUCET_SUPER_ADMIN.
+ * The deployer ends with no role. ZKPassportNFT is owned by IDENTITY_OWNER from
+ * the constructor. FaucetManager ends with DEFAULT_ADMIN_ROLE + ADMIN_ROLE on
+ * FAUCET_SUPER_ADMIN and ADMIN_ROLE on each FAUCET_OPERATORS address (owner
+ * decision 2026-10-10: the Safe owns both, the seed operator runs the faucet).
+ * With operators, the deployer holds the faucet roles for the few grants and
+ * then renounces them, so the Safe signs nothing to get the operator going.
  *
  * Usage:
+ *   IDENTITY_OWNER=<Safe> FAUCET_SUPER_ADMIN=<Safe> FAUCET_OPERATORS=<seed>,… \
  *   IDENTITY_ESTIMATE=1 npm run deploy:identity:ethereum   # MANDATORY first: gas vs balance
  *   npm run deploy:identity:ethereum
  *
@@ -82,6 +86,14 @@ async function main() {
 
   const owner = requireAddress("IDENTITY_OWNER");
   const faucetAdmin = requireAddress("FAUCET_SUPER_ADMIN");
+  const operators = (process.env.FAUCET_OPERATORS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((a) => {
+      if (!isAddress(a)) throw new Error(`FAUCET_OPERATORS contains a non-address: ${a}`);
+      return getAddress(a);
+    });
 
   const verifierCode = await publicClient.getBytecode({ address: ZKPASSPORT_VERIFIER });
   if (!verifierCode || verifierCode === "0x") {
@@ -94,6 +106,7 @@ async function main() {
   console.log(`💰 Balance:        ${formatEther(balance)} ETH`);
   console.log(`🪪 NFT owner:      ${owner}`);
   console.log(`🚰 Faucet admin:   ${faucetAdmin}  (DEFAULT_ADMIN_ROLE + ADMIN_ROLE)`);
+  for (const o of operators) console.log(`🛠  Faucet operator: ${o}  (ADMIN_ROLE)`);
   console.log(`📜 Policy:         ${ZKPASSPORT_DOMAIN} / ${ZKPASSPORT_SCOPE}, 18+, sanctions (non-strict), excluded ${EXCLUDED_COUNTRIES.join(" ")}`);
 
   const nftArgs = ["ZKPassport Verification", "ZKPASS", owner, ZKPASSPORT_DOMAIN, ZKPASSPORT_SCOPE, EXCLUDED_COUNTRIES, ZKPASSPORT_VERIFIER] as const;
@@ -112,8 +125,10 @@ async function main() {
   });
   const fees = await publicClient.estimateFeesPerGas();
   const maxFee = fees.maxFeePerGas ?? (await publicClient.getGasPrice());
-  const cost = (nftGas + faucetGas) * maxFee;
-  console.log(`\n⛽ Gas:            NFT ${nftGas} + faucet ${faucetGas}`);
+  // With operators: grant each, grant the super admin both roles, renounce both. ~60k gas apiece.
+  const roleGas = operators.length > 0 ? BigInt(operators.length + 4) * 60_000n : 0n;
+  const cost = (nftGas + faucetGas + roleGas) * maxFee;
+  console.log(`\n⛽ Gas:            NFT ${nftGas} + faucet ${faucetGas} + roles ~${roleGas}`);
   console.log(`   Max fee:        ${Number(maxFee) / 1e9} gwei`);
   console.log(`   Worst case:     ${formatEther(cost)} ETH`);
   if (cost > balance) {
@@ -141,13 +156,33 @@ async function main() {
   console.log(`   ✅ ${nft.address}`);
 
   console.log("📦 Deploying FaucetManager...");
-  const faucet = await viem.deployContract("FaucetManager", [nft.address, faucetAdmin]);
+  // With operators the deployer holds the roles just long enough to hand them out.
+  const initialFaucetAdmin = operators.length > 0 ? deployerAddress : faucetAdmin;
+  const faucet = await viem.deployContract("FaucetManager", [nft.address, initialFaucetAdmin]);
   await waitForCode("FaucetManager", faucet.address);
   console.log(`   ✅ ${faucet.address}`);
 
-  // Read everything back rather than trust the constructors.
   const ADMIN = (await faucet.read.ADMIN_ROLE()) as `0x${string}`;
   const DEFAULT = (await faucet.read.DEFAULT_ADMIN_ROLE()) as `0x${string}`;
+
+  if (operators.length > 0) {
+    const send = async (label: string, write: () => Promise<`0x${string}`>) => {
+      const hash = await write();
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") throw new Error(`${label} reverted (${hash})`);
+      console.log(`   ✅ ${label}`);
+    };
+    for (const o of operators) await send(`ADMIN_ROLE → ${o}`, () => faucet.write.grantRole([ADMIN, o]));
+    await send(`DEFAULT_ADMIN_ROLE → ${faucetAdmin}`, () => faucet.write.grantRole([DEFAULT, faucetAdmin]));
+    await send(`ADMIN_ROLE → ${faucetAdmin}`, () => faucet.write.grantRole([ADMIN, faucetAdmin]));
+    // DEFAULT last: once it is gone the deployer can change nothing.
+    if (deployerAddress !== faucetAdmin) {
+      await send("deployer renounces ADMIN_ROLE", () => faucet.write.renounceRole([ADMIN, deployerAddress]));
+      await send("deployer renounces DEFAULT_ADMIN_ROLE", () => faucet.write.renounceRole([DEFAULT, deployerAddress]));
+    }
+  }
+
+  // Read everything back rather than trust the constructors.
   const sameList = JSON.stringify(await nft.read.excludedCountries()) === JSON.stringify(EXCLUDED_COUNTRIES);
   const checks: [string, boolean][] = [
     ["NFT owner is IDENTITY_OWNER", getAddress((await nft.read.owner()) as string) === owner],
@@ -158,7 +193,11 @@ async function main() {
     ["faucet points at the new NFT", getAddress((await faucet.read.nftContract()) as string) === getAddress(nft.address)],
     ["faucet admin holds DEFAULT_ADMIN_ROLE", (await faucet.read.hasRole([DEFAULT, faucetAdmin])) as boolean],
     ["faucet admin holds ADMIN_ROLE", (await faucet.read.hasRole([ADMIN, faucetAdmin])) as boolean],
-    ["deployer holds no faucet role", deployerAddress === faucetAdmin || !((await faucet.read.hasRole([DEFAULT, deployerAddress])) as boolean)],
+    ...(await Promise.all(
+      operators.map(async (o) => [`operator ${o} holds ADMIN_ROLE`, (await faucet.read.hasRole([ADMIN, o])) as boolean] as [string, boolean])
+    )),
+    ["deployer holds no faucet DEFAULT_ADMIN_ROLE", deployerAddress === faucetAdmin || !((await faucet.read.hasRole([DEFAULT, deployerAddress])) as boolean)],
+    ["deployer holds no faucet ADMIN_ROLE", deployerAddress === faucetAdmin || operators.includes(deployerAddress) || !((await faucet.read.hasRole([ADMIN, deployerAddress])) as boolean)],
   ];
   for (const [label, ok] of checks) {
     if (!ok) throw new Error(`Check failed: ${label}`);
@@ -184,6 +223,7 @@ async function main() {
       deployer: deployerAddress,
       owner,
       faucetAdmin,
+      faucetOperators: operators,
       domain: ZKPASSPORT_DOMAIN,
       scope: ZKPASSPORT_SCOPE,
       excludedCountries: EXCLUDED_COUNTRIES,
