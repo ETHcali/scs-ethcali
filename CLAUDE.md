@@ -97,8 +97,15 @@ Every contract follows the same shape — match it rather than inventing a new o
   `SwagFactory.deployCollection()`.
 - **`Swag1155` prices are per payment token** (`setPaymentOption`), not a field on the
   variant. `buy()` takes a `paymentToken` argument.
-- **`ZKPassportNFT`'s constructor takes 5 args** (name, symbol, owner, domain, scope) and
-  minting is proof-based `mint(params, isIDCard)` against a verifier.
+- **`ZKPassportNFT`'s constructor takes 7 args** (name, symbol, owner, domain, scope,
+  excludedCountries, verifier). The verifier is **immutable** (no `setVerifier`: an owner who
+  could repoint it could mint to anyone and drain the faucet); tests pass the mock there via
+  `test/helpers/zkpassport.ts`. The country list must be **sorted, unique, uppercase alpha-3**
+  — ZKPassport compares it exactly with the proof's list. Minting is `mint(params, isIDCard)`.
+  `mint` enforces the ZKPassport dashboard policy (domain `ethcali.org`, scope `policy-1`,
+  age 18+, non-strict sanctions (`SANCTIONS_STRICT`), one exclusion list for nationality and issuing country, devMode
+  off, 7-day validity). Change the dashboard and the contract's list together
+  (`setExcludedCountries`). The mock verifier evaluates the lists it is passed.
 - **Hardhat cannot decode a revert reason for a bare ETH transfer** into `receive()`.
   Assert the rejection and the unchanged balance instead of the message.
 - **Fee-on-transfer tokens**: staking rejects them (a bond must be exact); donations credit
@@ -133,6 +140,9 @@ npm run verify:<net>
   `deploy-donations.ts`); add one for a new family rather than reusing deploy-all. The swag
   scripts are wired for Base only (`deploy:swag:base`, `estimate:swag:base`); add a script
   entry per chain if swag ever leaves Base.
+- **Identity** (`deploy-identity.ts`, `deploy:identity:ethereum`): ZKPassportNFT + its
+  FaucetManager only, policy fixed in the script. `IDENTITY_ESTIMATE=1` first; rehearse with
+  `--network localhost` against `anvil --fork-url <mainnet>`, which writes nothing.
 - `seed:swag` reads `swag-catalogue.json`, skips SKUs already in the factory registry, and
   passes `SWAG_SIGNER` as the sixth `deployCollection` argument so `SIGNER_ROLE` lands in the
   same transaction. `ITEM_TREASURY` / `ITEM_ADMIN` fall back to `SWAG_TREASURY_ADDRESS` /

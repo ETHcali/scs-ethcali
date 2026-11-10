@@ -15,7 +15,13 @@ export function uid(label: string): `0x${string}` {
   return keccak256(toBytes(label));
 }
 
-/** Empty ProofVerificationParams — the mock verifier ignores every field. */
+/** The contract's required validity window (VALIDITY_PERIOD_SECONDS). */
+export const VALIDITY_PERIOD_SECONDS = 604800n;
+
+/**
+ * ProofVerificationParams the mock accepts. The mock ignores the proof itself;
+ * the contract still checks devMode and the validity window before calling it.
+ */
 export const EMPTY_PARAMS = {
   version: ("0x" + "00".repeat(32)) as `0x${string}`,
   proofVerificationData: {
@@ -25,15 +31,21 @@ export const EMPTY_PARAMS = {
   },
   committedInputs: "0x" as `0x${string}`,
   serviceConfig: {
-    validityPeriodInSeconds: 0n,
+    validityPeriodInSeconds: VALIDITY_PERIOD_SECONDS,
     domain: "",
     scope: "",
     devMode: false,
   },
 };
 
-export const DEFAULT_DOMAIN = "ethcali.com";
-export const DEFAULT_SCOPE = "ethcali-verification";
+export const DEFAULT_DOMAIN = "ethcali.org";
+export const DEFAULT_SCOPE = "policy-1";
+
+/**
+ * The production exclusion list (owner decision 2026-10-10), for nationality and
+ * issuing country. Sorted: ZKPassport requires the proof's list in that order.
+ */
+export const EXCLUDED_COUNTRIES = ["AFG", "BLR", "CUB", "IRN", "MMR", "PRK", "RUS", "SDN", "SYR", "VEN", "YEM", "ZWE"];
 
 /**
  * Deploy ZKPassportNFT wired to a mock verifier.
@@ -53,10 +65,10 @@ export async function deployZKPassport(
     owner,
     DEFAULT_DOMAIN,
     DEFAULT_SCOPE,
+    EXCLUDED_COUNTRIES,
+    // The verifier is fixed at deploy; locally it is the mock.
+    verifier.address,
   ]);
-
-  // Point at the mock so minting works on the local network.
-  await nft.write.setVerifier([verifier.address]);
 
   return { nft, verifier };
 }
